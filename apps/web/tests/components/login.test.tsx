@@ -6,9 +6,10 @@ describe("LoginPage", () => {
   it("links to the same-origin Google OAuth entry point", () => {
     render(<LoginPage />);
 
-    expect(
-      screen.getByRole("link", { name: /continue with google/i }),
-    ).toHaveAttribute("href", "/auth/google/login");
+    expect(screen.getByRole("link", { name: /continue with google/i })).toHaveAttribute(
+      "href",
+      "/auth/google/login",
+    );
   });
 
   it("explains that Google sign-up is capacity limited", () => {

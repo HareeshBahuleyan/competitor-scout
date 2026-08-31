@@ -83,10 +83,7 @@ def create_app(
     app.include_router(briefs_router)
     app.include_router(runs_router)
     app.include_router(settings_router)
-    if (
-        resolved_settings.environment == "test"
-        and resolved_settings.e2e_auth_secret is not None
-    ):
+    if resolved_settings.environment == "test" and resolved_settings.e2e_auth_secret is not None:
         app.include_router(test_auth_router)
     if current_user_override is not None:
         app.dependency_overrides[current_user] = current_user_override

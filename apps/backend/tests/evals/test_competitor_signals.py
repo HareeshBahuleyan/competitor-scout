@@ -24,9 +24,7 @@ def test_versioned_corpus_has_broad_unique_coverage() -> None:
     cases = load_corpus()
     ids = [case["id"] for case in cases]
     supported_categories = {
-        case["expected_category"]
-        for case in cases
-        if case["expected_publish"] is True
+        case["expected_category"] for case in cases if case["expected_publish"] is True
     }
 
     assert len(cases) >= 20
@@ -88,9 +86,11 @@ async def test_offline_fixture_thresholds_and_citations() -> None:
             task_kind=ChildTaskKind.FIRST_PARTY_SOURCE_REVIEW,
             url_validator=canonical,
         )
-        if publication.evidence_indexes and all(
-            index < len(accepted) for index in publication.evidence_indexes
-        ) and not rejected_evidence:
+        if (
+            publication.evidence_indexes
+            and all(index < len(accepted) for index in publication.evidence_indexes)
+            and not rejected_evidence
+        ):
             valid_citations += 1
         if publication.category.value == case["expected_category"]:
             correct_categories += 1
@@ -104,9 +104,7 @@ async def test_offline_fixture_thresholds_and_citations() -> None:
 
 
 def test_duplicate_groups_resolve_to_one_publication_key() -> None:
-    duplicate_cases = [
-        case for case in load_corpus() if case.get("duplicate_group") is not None
-    ]
+    duplicate_cases = [case for case in load_corpus() if case.get("duplicate_group") is not None]
     grouped: dict[str, set[str]] = {}
     for case in duplicate_cases:
         finding = case["fixture_finding"]

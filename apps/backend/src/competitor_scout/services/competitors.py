@@ -227,9 +227,7 @@ async def update_competitor_status(
             )
         )
         if approved_source is None:
-            raise CompetitorActivationNotAllowed(
-                "approved source required to activate competitor"
-            )
+            raise CompetitorActivationNotAllowed("approved source required to activate competitor")
     competitor.status = status
 
 

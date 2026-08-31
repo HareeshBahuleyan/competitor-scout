@@ -82,10 +82,7 @@ def test_e2e_auth_secret_is_rejected_outside_test() -> None:
 
 def test_e2e_auth_secret_is_allowed_in_test() -> None:
     settings = Settings(
-        **(
-            valid_values()
-            | {"environment": "test", "e2e_auth_secret": "test-only-secret"}
-        )
+        **(valid_values() | {"environment": "test", "e2e_auth_secret": "test-only-secret"})
     )
 
     assert settings.e2e_auth_secret is not None

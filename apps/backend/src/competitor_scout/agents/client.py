@@ -95,8 +95,8 @@ class OtariClient:
         web-search-call cap, so the application must still enforce its own search budget.
         """
         effective_tool_iterations = (
-            2 if enable_web_search else 1
-        ) if max_tool_iterations is None else max_tool_iterations
+            (2 if enable_web_search else 1) if max_tool_iterations is None else max_tool_iterations
+        )
         self._validate_request_bounds(
             model=model,
             messages=messages,
@@ -247,9 +247,7 @@ class OtariClient:
             tool_calls=cls._non_negative_int(usage.get("tool_calls")),
             cost_usd=cls._cost(usage.get("cost_usd")),
             pricing_source=(
-                usage["pricing_source"]
-                if isinstance(usage.get("pricing_source"), str)
-                else None
+                usage["pricing_source"] if isinstance(usage.get("pricing_source"), str) else None
             ),
         )
 

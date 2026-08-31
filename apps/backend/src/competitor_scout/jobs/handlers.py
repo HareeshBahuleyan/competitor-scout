@@ -320,8 +320,7 @@ class SourceDiscoveryHandler:
     ) -> bool:
         return (
             reserved_cost > self._settings.max_run_cost_usd
-            or claim.initial_daily_cost + reserved_cost
-            > self._settings.max_user_daily_cost_usd
+            or claim.initial_daily_cost + reserved_cost > self._settings.max_user_daily_cost_usd
         )
 
     async def _stop_for_cost(self, claim: _DiscoveryClaim) -> ScoutRunStatus:

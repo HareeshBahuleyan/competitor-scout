@@ -223,9 +223,7 @@ class ScoutRun(Base):
             "user_id",
             "scheduled_for",
             unique=True,
-            postgresql_where=text(
-                "competitor_id IS NULL AND run_type = 'weekly_brief'"
-            ),
+            postgresql_where=text("competitor_id IS NULL AND run_type = 'weekly_brief'"),
         ),
         Index("ix_scout_runs_user_created", "user_id", "created_at", "id"),
     )

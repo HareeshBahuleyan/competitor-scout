@@ -63,8 +63,7 @@ async def _drop_database(database_name: str) -> None:
 def migrated_database_url() -> Iterator[str]:
     database_name = f"{POSTGRES_DATABASE_PREFIX}{uuid.uuid4().hex}"
     database_url = (
-        "postgresql+asyncpg://competitor_scout:competitor_scout@localhost:5432/"
-        f"{database_name}"
+        f"postgresql+asyncpg://competitor_scout:competitor_scout@localhost:5432/{database_name}"
     )
     asyncio.run(_create_database(database_name))
 

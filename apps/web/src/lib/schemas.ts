@@ -33,12 +33,7 @@ export type CursorPage<Item> = {
   next_cursor: string | null;
 };
 
-export const competitorStatusSchema = z.enum([
-  "discovering",
-  "active",
-  "paused",
-  "deleted",
-]);
+export const competitorStatusSchema = z.enum(["discovering", "active", "paused", "deleted"]);
 
 export const sourceCategorySchema = z.enum([
   "homepage",
@@ -97,8 +92,17 @@ const decimalNumberSchema = z
 const nullableMoneySchema = z.union([z.number(), z.string()]).transform(String).nullable();
 
 export const findingCategorySchema = z.enum([
-  "pricing", "product", "feature", "positioning", "integration", "customer_win",
-  "partnership", "leadership", "hiring", "market_expansion", "other",
+  "pricing",
+  "product",
+  "feature",
+  "positioning",
+  "integration",
+  "customer_win",
+  "partnership",
+  "leadership",
+  "hiring",
+  "market_expansion",
+  "other",
 ]);
 export const significanceLevelSchema = z.enum(["low", "medium", "high", "critical"]);
 
@@ -122,7 +126,10 @@ export const findingPageSchema = cursorPageSchema(findingSchema);
 
 export const findingEvidenceSchema = z.object({
   id: z.string().uuid(),
-  source_url: z.string().url().refine((value) => new URL(value).protocol === "https:", "HTTPS URL required"),
+  source_url: z
+    .string()
+    .url()
+    .refine((value) => new URL(value).protocol === "https:", "HTTPS URL required"),
   source_domain: z.string(),
   source_title: z.string(),
   source_type: z.enum(["first_party", "news"]),
@@ -138,9 +145,25 @@ export const findingEvidenceSchema = z.object({
 export type FindingEvidence = z.infer<typeof findingEvidenceSchema>;
 export const findingEvidencePageSchema = cursorPageSchema(findingEvidenceSchema);
 
-export const runTypeSchema = z.enum(["source_discovery", "daily_scout", "manual_scout", "weekly_brief"]);
-export const runStatusSchema = z.enum(["queued", "planning", "gathering", "synthesizing", "completed", "partial", "failed"]);
-export const runLifecycleStepSchema = z.object({ state: runStatusSchema, occurred_at: timestampSchema });
+export const runTypeSchema = z.enum([
+  "source_discovery",
+  "daily_scout",
+  "manual_scout",
+  "weekly_brief",
+]);
+export const runStatusSchema = z.enum([
+  "queued",
+  "planning",
+  "gathering",
+  "synthesizing",
+  "completed",
+  "partial",
+  "failed",
+]);
+export const runLifecycleStepSchema = z.object({
+  state: runStatusSchema,
+  occurred_at: timestampSchema,
+});
 
 export const runSchema = z.object({
   id: z.string().uuid(),
@@ -213,29 +236,31 @@ export const EMPTY_BRIEF_TITLE = "Weekly brief: no material changes";
 export const EMPTY_BRIEF_EXECUTIVE_SUMMARY =
   "No accepted material changes were published during this weekly period.";
 
-export const weeklyBriefSchema = z.object({
-  id: z.string().uuid(),
-  scout_run_id: z.string().uuid(),
-  period_start: z.string().date(),
-  period_end: z.string().date(),
-  title: z.string().min(1).max(300),
-  executive_summary: z.string().min(1).max(5_000),
-  sections: z.array(briefSectionSchema).max(20),
-  published_at: timestampSchema,
-  created_at: timestampSchema,
-}).superRefine((brief, context) => {
-  if (
-    brief.sections.length === 0
-    && (brief.title !== EMPTY_BRIEF_TITLE
-      || brief.executive_summary !== EMPTY_BRIEF_EXECUTIVE_SUMMARY)
-  ) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Empty weekly briefs must use the canonical no-material-changes representation.",
-      path: ["sections"],
-    });
-  }
-});
+export const weeklyBriefSchema = z
+  .object({
+    id: z.string().uuid(),
+    scout_run_id: z.string().uuid(),
+    period_start: z.string().date(),
+    period_end: z.string().date(),
+    title: z.string().min(1).max(300),
+    executive_summary: z.string().min(1).max(5_000),
+    sections: z.array(briefSectionSchema).max(20),
+    published_at: timestampSchema,
+    created_at: timestampSchema,
+  })
+  .superRefine((brief, context) => {
+    if (
+      brief.sections.length === 0 &&
+      (brief.title !== EMPTY_BRIEF_TITLE ||
+        brief.executive_summary !== EMPTY_BRIEF_EXECUTIVE_SUMMARY)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Empty weekly briefs must use the canonical no-material-changes representation.",
+        path: ["sections"],
+      });
+    }
+  });
 
 export type WeeklyBrief = z.infer<typeof weeklyBriefSchema>;
 export const weeklyBriefPageSchema = cursorPageSchema(weeklyBriefSchema);

@@ -34,9 +34,7 @@ def parse_args() -> argparse.Namespace:
 
 def require_paid_authorization(args: argparse.Namespace) -> None:
     if os.environ.get("ALLOW_PAID_OTARI_EVALS", "").casefold() != "true":
-        raise SystemExit(
-            "Paid evaluation blocked: set ALLOW_PAID_OTARI_EVALS=true explicitly."
-        )
+        raise SystemExit("Paid evaluation blocked: set ALLOW_PAID_OTARI_EVALS=true explicitly.")
     if not args.confirm_paid_run:
         raise SystemExit(
             "Paid evaluation blocked: pass --confirm-paid-run as the second safeguard."
@@ -92,20 +90,12 @@ async def run_case(
         all(index < len(child_result.evidence) for index in finding.evidence_indexes)
         for finding in synthesis_result.findings
     )
-    category_correct = (
-        not expected_publish
-        or any(
-            finding.category.value == case["expected_category"]
-            for finding in synthesis_result.findings
-        )
+    category_correct = not expected_publish or any(
+        finding.category.value == case["expected_category"] for finding in synthesis_result.findings
     )
     quote_fragment = case["required_quote_fragment"]
-    quote_present = (
-        quote_fragment is None
-        or any(
-            str(quote_fragment) in evidence.quoted_text
-            for evidence in child_result.evidence
-        )
+    quote_present = quote_fragment is None or any(
+        str(quote_fragment) in evidence.quoted_text for evidence in child_result.evidence
     )
     return {
         "id": case_id,
@@ -138,8 +128,7 @@ async def run_live() -> int:
     corpus = _load_corpus()
     maximum_cost = settings.max_run_cost_usd * len(corpus) * 2
     print(
-        f"Starting {len(corpus)} cases. Conservative configured maximum: "
-        f"USD {maximum_cost:.2f}.",
+        f"Starting {len(corpus)} cases. Conservative configured maximum: USD {maximum_cost:.2f}.",
         flush=True,
     )
     results: list[dict[str, Any]] = []

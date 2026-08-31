@@ -1,11 +1,5 @@
 export type RunStatus =
-  | "queued"
-  | "planning"
-  | "gathering"
-  | "synthesizing"
-  | "completed"
-  | "partial"
-  | "failed";
+  "queued" | "planning" | "gathering" | "synthesizing" | "completed" | "partial" | "failed";
 
 export type RunTimelineStep = {
   state: RunStatus;

@@ -57,4 +57,19 @@ All normal verification is offline and must not make paid Otari calls. The live
 evaluation script additionally requires both `ALLOW_PAID_OTARI_EVALS=true` and
 `--confirm-paid-run`.
 
+## Pre-commit checks
+
+Install [pre-commit](https://pre-commit.com/) and enable the repository hooks:
+
+```bash
+uv tool install pre-commit
+pre-commit install
+pre-commit run --all-files
+```
+
+The hooks reject common file errors, private keys, and leaked secrets; they also
+apply Ruff and Prettier linting and formatting. The Gitleaks hook requires Go.
+GitHub Actions repeats these checks and runs the backend, frontend, migration,
+build, dependency-review, and browser test suites for every pull request.
+
 See the [Railway deployment guide](docs/railway-deployment.md) for production topology, configuration, and smoke checks.

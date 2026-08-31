@@ -129,11 +129,7 @@ async def schedule_due_weekly_briefs(
     if now.tzinfo is None:
         raise ValueError("scheduler clock must be timezone-aware")
     current = now.astimezone(UTC)
-    users = list(
-        (
-            await session.scalars(select(User).where(User.disabled_at.is_(None)))
-        ).all()
-    )
+    users = list((await session.scalars(select(User).where(User.disabled_at.is_(None)))).all())
     scheduled: list[ScoutRun] = []
     for user in users:
         try:

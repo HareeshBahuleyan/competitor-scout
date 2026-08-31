@@ -1,17 +1,9 @@
 import { z } from "zod";
 
-import {
-  problemDetailsSchema,
-  type ProblemDetails,
-} from "@/lib/schemas";
+import { problemDetailsSchema, type ProblemDetails } from "@/lib/schemas";
 
 export type JsonValue =
-  | boolean
-  | null
-  | number
-  | string
-  | JsonValue[]
-  | { [key: string]: JsonValue };
+  boolean | null | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 export type MutationMethod = "DELETE" | "PATCH" | "POST" | "PUT";
 
@@ -62,7 +54,8 @@ async function errorFromResponse(response: Response): Promise<ApiError> {
     }
   }
 
-  const detail = response.status === 401 ? "authentication required" : `request failed: ${response.status}`;
+  const detail =
+    response.status === 401 ? "authentication required" : `request failed: ${response.status}`;
   return new ApiError(response.status, detail);
 }
 
@@ -98,7 +91,10 @@ const getRequestInit: RequestInit = {
   method: "GET",
 };
 
-export async function apiGet<Schema extends z.ZodTypeAny>(path: string, schema: Schema): Promise<z.output<Schema>> {
+export async function apiGet<Schema extends z.ZodTypeAny>(
+  path: string,
+  schema: Schema,
+): Promise<z.output<Schema>> {
   return (await request(path, getRequestInit, schema)) as z.output<Schema>;
 }
 
@@ -110,7 +106,10 @@ function redirectToLogin() {
   }
 }
 
-export async function apiGetClient<Schema extends z.ZodTypeAny>(path: string, schema: Schema): Promise<z.output<Schema>> {
+export async function apiGetClient<Schema extends z.ZodTypeAny>(
+  path: string,
+  schema: Schema,
+): Promise<z.output<Schema>> {
   return (await request(path, getRequestInit, schema, {
     onUnauthorized: redirectToLogin,
   })) as z.output<Schema>;

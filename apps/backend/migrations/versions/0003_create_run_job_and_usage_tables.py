@@ -128,9 +128,7 @@ def upgrade() -> None:
         "scout_runs",
         ["run_type", "user_id", "scheduled_for"],
         unique=True,
-        postgresql_where=sa.text(
-            "competitor_id IS NULL AND run_type = 'weekly_brief'"
-        ),
+        postgresql_where=sa.text("competitor_id IS NULL AND run_type = 'weekly_brief'"),
     )
 
     op.create_table(

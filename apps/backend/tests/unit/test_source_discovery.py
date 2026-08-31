@@ -378,8 +378,7 @@ async def test_handler_stops_before_source_discovery_would_exceed_cost_limit(
         service=service,
         settings=settings,
         now=lambda: NOW,
-        cost_estimator=lambda _model, _tokens, _search: settings.max_run_cost_usd
-        + Decimal("0.01"),
+        cost_estimator=lambda _model, _tokens, _search: settings.max_run_cost_usd + Decimal("0.01"),
     ).handle(run_id=run_id)
 
     assert result is ScoutRunStatus.PARTIAL

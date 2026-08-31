@@ -41,8 +41,7 @@ class RejectedEvidence:
 
 def _normalized_quote(value: str) -> str:
     without_controls = "".join(
-        " " if unicodedata.category(character).startswith("C") else character
-        for character in value
+        " " if unicodedata.category(character).startswith("C") else character for character in value
     )
     return " ".join(without_controls.split())
 
@@ -84,9 +83,7 @@ async def validate_evidence_scope(
         raise ValueError("unsupported child task kind") from None
 
     allowed = await _canonical_scope(
-        approved_urls
-        if kind is ChildTaskKind.FIRST_PARTY_SOURCE_REVIEW
-        else inspected_urls,
+        approved_urls if kind is ChildTaskKind.FIRST_PARTY_SOURCE_REVIEW else inspected_urls,
         url_validator=url_validator,
     )
     accepted: list[NormalizedEvidence] = []

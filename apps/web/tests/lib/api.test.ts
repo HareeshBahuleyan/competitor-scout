@@ -18,8 +18,7 @@ function stubResponse({
   return {
     response: {
       headers: {
-        get: (name: string) =>
-          name.toLowerCase() === "content-type" ? contentType : null,
+        get: (name: string) => (name.toLowerCase() === "content-type" ? contentType : null),
       },
       json,
       ok: status >= 200 && status < 300,
@@ -65,10 +64,9 @@ describe("apiGet", () => {
     });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
 
-    const error: unknown = await apiGet(
-      "/api/v1/summary",
-      z.object({ count: z.number() }),
-    ).catch((caught: unknown) => caught);
+    const error: unknown = await apiGet("/api/v1/summary", z.object({ count: z.number() })).catch(
+      (caught: unknown) => caught,
+    );
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toEqual(
@@ -84,15 +82,13 @@ describe("apiGet", () => {
   it("does not access window when a server-safe request receives 401", async () => {
     const { response } = stubResponse({ status: 401 });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
-    const windowGetter = vi
-      .spyOn(globalThis, "window", "get")
-      .mockImplementation(() => {
-        throw new Error("server execution must not access window");
-      });
+    const windowGetter = vi.spyOn(globalThis, "window", "get").mockImplementation(() => {
+      throw new Error("server execution must not access window");
+    });
 
-    await expect(
-      apiGet("/api/v1/me", z.object({ id: z.string() })),
-    ).rejects.toMatchObject({ status: 401 });
+    await expect(apiGet("/api/v1/me", z.object({ id: z.string() }))).rejects.toMatchObject({
+      status: 401,
+    });
     expect(windowGetter).not.toHaveBeenCalled();
   });
 
@@ -102,9 +98,9 @@ describe("apiGet", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
     vi.stubGlobal("window", { location: { assign } });
 
-    await expect(
-      apiGetClient("/api/v1/me", z.object({ id: z.string() })),
-    ).rejects.toMatchObject({ status: 401 });
+    await expect(apiGetClient("/api/v1/me", z.object({ id: z.string() }))).rejects.toMatchObject({
+      status: 401,
+    });
     expect(assign).toHaveBeenCalledOnce();
     expect(assign).toHaveBeenCalledWith("/login");
   });
@@ -113,9 +109,9 @@ describe("apiGet", () => {
     const { response } = stubResponse({ body: { count: "three" } });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
 
-    await expect(
-      apiGet("/api/v1/summary", z.object({ count: z.number() })),
-    ).rejects.toBeInstanceOf(z.ZodError);
+    await expect(apiGet("/api/v1/summary", z.object({ count: z.number() }))).rejects.toBeInstanceOf(
+      z.ZodError,
+    );
   });
 
   it("rejects absolute URLs before making a request", async () => {

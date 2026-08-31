@@ -107,9 +107,7 @@ def test_finding_requires_dedupe_and_primary_evidence_fields() -> None:
 
 def test_primary_evidence_must_be_one_of_the_citations() -> None:
     with pytest.raises(ValidationError):
-        FindingCandidate.model_validate_json(
-            json.dumps(finding() | {"primary_evidence_index": 3})
-        )
+        FindingCandidate.model_validate_json(json.dumps(finding() | {"primary_evidence_index": 3}))
 
 
 def test_significance_is_a_closed_enum() -> None:

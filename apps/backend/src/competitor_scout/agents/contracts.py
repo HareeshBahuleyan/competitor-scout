@@ -67,14 +67,9 @@ class PlannedChildTask(StrictContract):
     @model_validator(mode="after")
     def enforce_kind_scope(self) -> Self:
         if self.kind is ChildTaskKind.FIRST_PARTY_SOURCE_REVIEW:
-            if (
-                not self.source_urls
-                or self.search_query is not None
-                or self.max_search_calls < 1
-            ):
+            if not self.source_urls or self.search_query is not None or self.max_search_calls < 1:
                 raise ValueError(
-                    "first-party review requires source URLs, no search query, "
-                    "and a search budget"
+                    "first-party review requires source URLs, no search query, and a search budget"
                 )
         elif self.source_urls or not self.search_query or self.max_search_calls < 1:
             raise ValueError(

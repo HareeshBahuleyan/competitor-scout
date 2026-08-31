@@ -101,9 +101,7 @@ def test_schedule_keys_are_stable() -> None:
     assert daily_deduplication_key("competitor", date(2026, 10, 25)) == (
         "daily_scout:competitor:2026-10-25"
     )
-    assert weekly_deduplication_key("user", date(2026, 10, 25)) == (
-        "weekly_brief:user:2026-10-25"
-    )
+    assert weekly_deduplication_key("user", date(2026, 10, 25)) == ("weekly_brief:user:2026-10-25")
 
 
 def test_dst_uses_first_ambiguous_occurrence_and_first_valid_time_after_gap() -> None:

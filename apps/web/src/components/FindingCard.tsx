@@ -13,7 +13,9 @@ export function FindingCard({ finding }: { finding: Finding }) {
         <span>{Math.round(finding.confidence * 100)}% confidence</span>
       </div>
       <h2 className="mt-2 text-lg font-semibold">
-        <Link className="hover:underline" href={`/findings/${finding.id}`}>{finding.title}</Link>
+        <Link className="hover:underline" href={`/findings/${finding.id}`}>
+          {finding.title}
+        </Link>
       </h2>
       <p className="mt-2 text-sm leading-6 text-slate-600">{finding.summary}</p>
       <time className="mt-3 block text-xs text-slate-500" dateTime={finding.published_at}>

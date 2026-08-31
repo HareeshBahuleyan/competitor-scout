@@ -347,9 +347,7 @@ async def test_cross_user_record_routes_all_return_404(db_session) -> None:
     async with await make_client(db_session, outsider, FakeSourceValidator()) as client:
         responses = [
             await client.get(f"/api/v1/competitors/{competitor.id}"),
-            await client.patch(
-                f"/api/v1/competitors/{competitor.id}", json={"name": "Stolen"}
-            ),
+            await client.patch(f"/api/v1/competitors/{competitor.id}", json={"name": "Stolen"}),
             await client.delete(f"/api/v1/competitors/{competitor.id}"),
             await client.get(f"/api/v1/competitors/{competitor.id}/sources"),
             await client.patch(
@@ -396,9 +394,7 @@ async def test_source_list_is_cursor_paginated_and_first_approval_activates(db_s
     validator.results[original_url] = "https://www.acme.com/pricing"
 
     async with await make_client(db_session, user, validator) as client:
-        page = await client.get(
-            f"/api/v1/competitors/{competitor.id}/sources", params={"limit": 1}
-        )
+        page = await client.get(f"/api/v1/competitors/{competitor.id}/sources", params={"limit": 1})
         approved = await client.patch(
             f"/api/v1/competitors/{competitor.id}/sources/{first.id}",
             json={"approval_status": "approved"},
@@ -566,23 +562,15 @@ async def test_discovery_endpoint_atomically_enqueues_one_run_per_five_minute_bu
     await db_session.flush()
 
     async with await make_client(db_session, user, FakeSourceValidator()) as client:
-        first = await client.post(
-            f"/api/v1/competitors/{competitor.id}/discover-sources"
-        )
-        second = await client.post(
-            f"/api/v1/competitors/{competitor.id}/discover-sources"
-        )
+        first = await client.post(f"/api/v1/competitors/{competitor.id}/discover-sources")
+        second = await client.post(f"/api/v1/competitors/{competitor.id}/discover-sources")
 
     assert first.status_code == second.status_code == 202
     assert first.json() == second.json()
     run_id = uuid.UUID(first.json()["run_id"])
     run = await db_session.get(ScoutRun, run_id)
     jobs = list(
-        (
-            await db_session.scalars(
-                select(Job).where(Job.job_type == "source_discovery")
-            )
-        ).all()
+        (await db_session.scalars(select(Job).where(Job.job_type == "source_discovery"))).all()
     )
     assert run is not None
     assert run.status is ScoutRunStatus.QUEUED

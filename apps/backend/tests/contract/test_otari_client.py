@@ -82,9 +82,7 @@ async def test_omits_optional_tool_when_web_search_is_disabled() -> None:
         assert "tools" not in body
         return httpx.Response(200, content=fixture_bytes())
 
-    async with OtariClient(
-        settings(), transport=httpx.MockTransport(handler)
-    ) as client:
+    async with OtariClient(settings(), transport=httpx.MockTransport(handler)) as client:
         await client.structured_completion(
             model="competitor-scout-main",
             messages=[{"role": "user", "content": "Plan."}],
@@ -184,19 +182,11 @@ async def test_invalid_success_responses_fail_safely(case: str) -> None:
         if case == "refusal":
             return httpx.Response(
                 200,
-                json={
-                    "choices": [
-                        {"message": {"refusal": "provider detail", "content": None}}
-                    ]
-                },
+                json={"choices": [{"message": {"refusal": "provider detail", "content": None}}]},
             )
         return httpx.Response(
             200,
-            json={
-                "choices": [
-                    {"message": {"content": "{\"tasks\": [{\"kind\": \"run_shell\"}]}"}}
-                ]
-            },
+            json={"choices": [{"message": {"content": '{"tasks": [{"kind": "run_shell"}]}'}}]},
         )
 
     async with OtariClient(settings(), transport=httpx.MockTransport(handler)) as client:

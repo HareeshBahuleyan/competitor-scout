@@ -60,9 +60,7 @@ async def enqueue_in_session(
     )
     job = (await session.scalars(statement)).one_or_none()
     if job is None:
-        job = await session.scalar(
-            select(Job).where(Job.deduplication_key == deduplication_key)
-        )
+        job = await session.scalar(select(Job).where(Job.deduplication_key == deduplication_key))
     if job is None:
         raise RuntimeError("idempotent job enqueue did not resolve a row")
     return job
