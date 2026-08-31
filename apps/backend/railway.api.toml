@@ -1,0 +1,11 @@
+# Railway service Root Directory: /apps/backend
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "uvicorn competitor_scout.main:app --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/health/ready"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"
+preDeployCommand = "alembic upgrade head"

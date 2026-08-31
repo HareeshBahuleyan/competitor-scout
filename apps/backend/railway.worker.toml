@@ -1,0 +1,8 @@
+# Railway service Root Directory: /apps/backend
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "competitor-scout-worker"
+restartPolicyType = "ON_FAILURE"
