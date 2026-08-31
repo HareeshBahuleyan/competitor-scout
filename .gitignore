@@ -21,5 +21,6 @@ test-results/
 /eval-reports/
 
 # Local tooling and generated output
+/docs/superpowers/
 .DS_Store
 *.log
