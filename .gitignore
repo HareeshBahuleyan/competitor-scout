@@ -1,0 +1,25 @@
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.json
+htmlcov/
+
+# Node.js / Next.js
+node_modules/
+.next/
+playwright-report/
+test-results/
+/eval-reports/
+
+# Local tooling and generated output
+.DS_Store
+*.log
