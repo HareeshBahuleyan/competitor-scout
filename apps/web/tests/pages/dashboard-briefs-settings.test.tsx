@@ -138,6 +138,12 @@ describe("dashboard", () => {
         finding,
         {
           ...finding,
+          id: "77777777-7777-4777-8777-777777777777",
+          title: "Critical signal",
+          significance_level: "critical",
+        },
+        {
+          ...finding,
           id: "66666666-6666-4666-8666-666666666666",
           title: "Low signal",
           significance_level: "low",
@@ -146,9 +152,21 @@ describe("dashboard", () => {
     });
     renderWithQuery(<DashboardView />);
     expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(screen.getByText("Intelligence overview")).toBeInTheDocument();
+    expect(screen.getByText("Active monitors")).toBeInTheDocument();
+    expect(screen.getByText("Material signals")).toBeInTheDocument();
+    expect(screen.getByText("Runs to review")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Add competitor" })).toHaveAttribute(
+      "href",
+      "/competitors/new",
+    );
     expect(screen.getByRole("link", { name: "Acme changed pricing" })).toHaveAttribute(
       "href",
       `/findings/${finding.id}`,
+    );
+    expect(screen.getByRole("link", { name: "Critical signal" })).toHaveAttribute(
+      "href",
+      "/findings/77777777-7777-4777-8777-777777777777",
     );
     expect(screen.queryByText("Low signal")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Acme" })).toHaveAttribute(
@@ -162,6 +180,10 @@ describe("dashboard", () => {
       `/briefs/${brief.id}`,
     );
     expect(screen.getByText("1 of 10 competitor slots used")).toBeInTheDocument();
+    expect(apiGetClient).toHaveBeenCalledWith(
+      "/api/v1/findings?significance=critical&limit=5",
+      expect.anything(),
+    );
     expect(apiGetClient).toHaveBeenCalledWith(
       "/api/v1/findings?significance=high&limit=5",
       expect.anything(),
@@ -255,6 +277,9 @@ describe("settings and usage", () => {
     vi.mocked(apiMutate).mockResolvedValue(settings as never);
     renderWithQuery(<SettingsView />);
     expect(await screen.findByLabelText("Display name")).toHaveValue("Founder");
+    expect(screen.getByRole("heading", { name: "Profile" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Default schedule" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Usage" })).toBeInTheDocument();
     expect(screen.getByLabelText("Timezone")).toHaveValue("Europe/Berlin");
     expect(screen.getByLabelText("Default daily run time")).toHaveValue("08:30");
     expect(screen.getByText("competitor-scout-main")).toBeInTheDocument();

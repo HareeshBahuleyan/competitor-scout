@@ -1,4 +1,20 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+async function mockAuthenticatedUser(page: Page) {
+  await page.route("**/api/v1/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        avatar_url: null,
+        csrf_token: "csrf-token",
+        display_name: "Founder",
+        email: "founder@example.com",
+        id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        timezone: "Europe/Berlin",
+      },
+    });
+  });
+}
 
 test("renders the private-alpha authentication entry point", async ({ page }) => {
   await page.goto("/login");
@@ -11,6 +27,7 @@ test("renders the private-alpha authentication entry point", async ({ page }) =>
 });
 
 test("audits a completed run without rendering internal fields", async ({ page }) => {
+  await mockAuthenticatedUser(page);
   const runId = "11111111-1111-4111-8111-111111111111";
   await page.route(`**/api/v1/runs/${runId}`, async (route) => {
     await route.fulfill({
@@ -52,15 +69,21 @@ test("audits a completed run without rendering internal fields", async ({ page }
       },
     });
   });
+  await page.route("**/auth/logout", async (route) => {
+    await route.fulfill({ status: 204 });
+  });
 
   await page.goto(`/runs/${runId}`);
 
   await expect(page.getByRole("heading", { name: "manual scout run" })).toBeVisible();
   await expect(page.getByText("completed", { exact: true })).toBeVisible();
   await expect(page.getByText("must never render")).toHaveCount(0);
+  await page.getByRole("button", { name: "Log out" }).click();
+  await expect(page).toHaveURL("/login");
 });
 
 test("explains a partial run and its retries", async ({ page }) => {
+  await mockAuthenticatedUser(page);
   const runId = "33333333-3333-4333-8333-333333333333";
   await page.route(`**/api/v1/runs/${runId}`, async (route) => {
     await route.fulfill({
@@ -126,12 +149,14 @@ test("explains a partial run and its retries", async ({ page }) => {
   await page.goto(`/runs/${runId}`);
 
   await expect(page.getByText("Pricing source timed out after retry")).toBeVisible();
+  await page.getByText("Usage details", { exact: true }).click();
   await expect(page.getByText("Retries: 1")).toBeVisible();
   await expect(page.getByText("Tool calls: Unknown")).toBeVisible();
   await expect(page.getByText("Settled cost: Unknown")).toBeVisible();
 });
 
 test("renders finding evidence as inert text with provenance", async ({ page }) => {
+  await mockAuthenticatedUser(page);
   const findingId = "55555555-5555-4555-8555-555555555555";
   const runId = "33333333-3333-4333-8333-333333333333";
   await page.route(`**/api/v1/findings/${findingId}`, async (route) => {
@@ -197,6 +222,7 @@ test("renders finding evidence as inert text with provenance", async ({ page }) 
 });
 
 test("renders a grounded weekly brief and links every reference", async ({ page }) => {
+  await mockAuthenticatedUser(page);
   const briefId = "88888888-8888-4888-8888-888888888888";
   const findingId = "55555555-5555-4555-8555-555555555555";
   await page.route(`**/api/v1/briefs/${briefId}`, async (route) => {

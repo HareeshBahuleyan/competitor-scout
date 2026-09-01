@@ -38,7 +38,7 @@ export function SourceApprovalList({
           const actionsDisabled = disabled || isPending;
 
           return (
-            <li className="rounded-xl border border-slate-200 bg-white p-4" key={source.id}>
+            <li className="surface p-4" key={source.id}>
               <article className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">

@@ -1,14 +1,8 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 
-const navigation = [
-  { href: "/", label: "Dashboard" },
-  { href: "/competitors", label: "Competitors" },
-  { href: "/findings", label: "Findings" },
-  { href: "/runs", label: "Runs" },
-  { href: "/briefs", label: "Briefs" },
-  { href: "/settings", label: "Settings" },
-] as const;
+import { LogoutButton } from "@/components/LogoutButton";
+import { PrimaryNavigation } from "@/components/PrimaryNavigation";
 
 type AppShellProps = {
   children: ReactNode;
@@ -16,26 +10,69 @@ type AppShellProps = {
 
 export function AppShell({ children }: AppShellProps) {
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-950">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
-          <Link className="text-lg font-semibold tracking-tight" href="/">
-            Competitor Scout
+    <div className="app-shell min-h-screen text-slate-950 lg:grid lg:grid-cols-[17rem_minmax(0,1fr)]">
+      <aside className="app-sidebar sticky top-0 z-30 border-b border-slate-200 px-3 pt-3 lg:flex lg:h-screen lg:flex-col lg:border-r lg:border-b-0 lg:px-4 lg:py-5">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-1">
+          <Link className="group flex shrink-0 items-center gap-3" href="/">
+            <span aria-hidden="true" className="brand-mark">
+              <svg fill="none" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="7.5" stroke="currentColor" strokeWidth="1.8" />
+                <circle cx="12" cy="12" fill="currentColor" r="2.25" />
+                <path
+                  d="M12 2.5V5M21.5 12H19M12 19v2.5M5 12H2.5"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeWidth="1.8"
+                />
+              </svg>
+            </span>
+            <span>
+              <span className="block whitespace-nowrap text-[15px] font-semibold tracking-[-0.01em]">
+                Competitor Scout
+              </span>
+              <span className="hidden whitespace-nowrap text-[11px] text-slate-500 lg:block">
+                Market intelligence
+              </span>
+            </span>
           </Link>
-          <nav aria-label="Primary navigation">
-            <ul className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-medium text-slate-600">
-              {navigation.map((item) => (
-                <li key={item.href}>
-                  <Link className="transition-colors hover:text-slate-950" href={item.href}>
-                    {item.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <Link
+              aria-label="Add competitor"
+              className="icon-button"
+              href="/competitors/new"
+              title="Add competitor"
+            >
+              <svg aria-hidden="true" fill="none" viewBox="0 0 24 24">
+                <path
+                  d="M12 5v14M5 12h14"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeWidth="2"
+                />
+              </svg>
+            </Link>
+            <div className="lg:hidden">
+              <LogoutButton compact />
+            </div>
+          </div>
         </div>
-      </header>
-      <main className="mx-auto w-full max-w-7xl px-6 py-8">{children}</main>
+
+        <Suspense fallback={null}>
+          <PrimaryNavigation />
+        </Suspense>
+
+        <div className="mt-auto hidden px-3 pb-1 lg:block">
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <span className="size-2 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.12)]" />
+            Scout is ready
+          </div>
+          <LogoutButton />
+        </div>
+      </aside>
+
+      <main className="app-content min-w-0 px-5 py-7 sm:px-8 sm:py-9 lg:px-12 lg:py-12">
+        <div className="mx-auto w-full max-w-[1120px]">{children}</div>
+      </main>
     </div>
   );
 }

@@ -1,9 +1,44 @@
 @import "tailwindcss";
+@import "@heroui/styles";
+
+@theme {
+  --font-sans: "Avenir Next", Avenir, "Segoe UI", Helvetica, Arial, sans-serif;
+  --color-slate-50: #f8f7f4;
+  --color-slate-100: #f1efeb;
+  --color-slate-200: #e5e1da;
+  --color-slate-300: #d4cec5;
+  --color-slate-400: #aaa39a;
+  --color-slate-500: #7d766e;
+  --color-slate-600: #625c55;
+  --color-slate-700: #4b4641;
+  --color-slate-800: #35312e;
+  --color-slate-900: #272421;
+  --color-slate-950: #1d1b19;
+  --color-blue-50: #fff3f2;
+  --color-blue-700: #c94549;
+}
 
 :root {
   color-scheme: light;
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  --background: #f7f5f1;
+  --foreground: #272421;
+  --color-canvas: #f7f5f1;
+  --color-surface: #fffefa;
+  --color-sidebar: #f1eee8;
+  --color-ink: #272421;
+  --color-muted: #716b64;
+  --color-border: #e5e0d9;
+  --color-accent: #d34d50;
+  --color-accent-strong: #b93e42;
+  --color-accent-soft: #fae8e6;
+  --color-success: #27845d;
+  --color-warning: #b7791f;
+  --color-danger: #bd3035;
+  --radius-control: 0.75rem;
+  --radius-card: 0.875rem;
+  --radius-panel: 1.125rem;
+  --shadow-card: 0 1px 2px rgba(48, 40, 32, 0.04), 0 8px 24px rgba(48, 40, 32, 0.035);
+  --focus-ring: 0 0 0 3px rgba(211, 77, 80, 0.15);
 }
 
 * {
@@ -12,6 +47,8 @@
 
 html {
   background: var(--background);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 body {
@@ -19,10 +56,233 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
 }
 
 a {
   color: inherit;
   text-decoration: none;
+}
+
+::selection {
+  background: #f4c9c7;
+  color: #2d2020;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.app-shell {
+  background:
+    radial-gradient(circle at 76% -10%, rgba(255, 255, 255, 0.9), transparent 35rem),
+    var(--color-canvas);
+}
+
+.app-sidebar {
+  background: color-mix(in srgb, var(--color-sidebar) 94%, white);
+  box-shadow: 1px 0 0 rgba(255, 255, 255, 0.6);
+}
+
+.brand-mark {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 0.65rem;
+  background: var(--color-accent);
+  color: white;
+  box-shadow: 0 5px 14px rgba(185, 62, 66, 0.22);
+}
+
+.brand-mark svg,
+.icon-button svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.icon-button {
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 0.7rem;
+  background: rgba(255, 255, 255, 0.68);
+  color: var(--color-accent-strong);
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    transform 150ms ease;
+}
+
+.icon-button:hover {
+  border-color: #d8c5c2;
+  background: white;
+  transform: translateY(-1px);
+}
+
+.nav-link {
+  display: flex;
+  min-height: 2.5rem;
+  align-items: center;
+  gap: 0.7rem;
+  border-radius: 0.65rem;
+  padding: 0.58rem 0.75rem;
+  color: var(--color-slate-600);
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.nav-link:hover {
+  background: rgba(255, 255, 255, 0.62);
+  color: var(--color-slate-950);
+}
+
+.nav-link[aria-current="page"] {
+  background: var(--color-surface);
+  color: var(--color-accent-strong);
+  box-shadow:
+    0 1px 2px rgba(48, 40, 32, 0.05),
+    inset 0 0 0 1px rgba(211, 77, 80, 0.09);
+}
+
+.app-content h1 {
+  letter-spacing: -0.035em;
+}
+
+.app-content h2,
+.app-content h3 {
+  letter-spacing: -0.018em;
+}
+
+.app-content :is(input, select, textarea) {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  box-shadow: inset 0 1px 2px rgba(48, 40, 32, 0.025);
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.app-content :is(input, select, textarea):focus {
+  border-color: #d99092;
+  box-shadow: var(--focus-ring);
+  outline: none;
+}
+
+.surface {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.surface-interactive {
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.surface-interactive:hover {
+  border-color: #d8c9c1;
+  box-shadow: 0 10px 30px rgba(48, 40, 32, 0.07);
+  transform: translateY(-2px);
+}
+
+.eyebrow {
+  color: var(--color-accent-strong);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.section-link {
+  color: var(--color-accent-strong);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.section-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.empty-state {
+  border: 1px dashed var(--color-slate-300);
+  border-radius: var(--radius-card);
+  background: rgba(255, 255, 255, 0.3);
+  color: var(--color-muted);
+}
+
+.app-content progress {
+  height: 0.45rem;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-slate-100);
+}
+
+.app-content progress::-webkit-progress-bar {
+  background: var(--color-slate-100);
+}
+
+.app-content progress::-webkit-progress-value,
+.app-content progress::-moz-progress-bar {
+  border-radius: 999px;
+  background: var(--color-accent);
+}
+
+.app-content .rounded-xl.bg-white {
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.app-content :is(button, a).bg-slate-950 {
+  background: var(--color-accent);
+  box-shadow: 0 4px 12px rgba(185, 62, 66, 0.16);
+  transition:
+    background-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.app-content :is(button, a).bg-slate-950:hover {
+  background: var(--color-accent-strong);
+  box-shadow: 0 6px 16px rgba(185, 62, 66, 0.2);
+  transform: translateY(-1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+@media (min-width: 64rem) {
+  .nav-link {
+    width: 100%;
+  }
 }

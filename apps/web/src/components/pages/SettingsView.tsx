@@ -1,8 +1,10 @@
 "use client";
 
+import { Button } from "@heroui/react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 
+import { LoadingState } from "@/components/ui/LoadingState";
 import { apiGetClient, apiMutate } from "@/lib/api";
 import { meSchema, settingsSchema, usageSummarySchema } from "@/lib/schemas";
 
@@ -86,8 +88,9 @@ export function SettingsView() {
     update.mutate();
   }
 
-  if (me.isPending || settings.isPending || usage.isPending)
-    return <p role="status">Loading settings…</p>;
+  if (me.isPending || settings.isPending || usage.isPending) {
+    return <LoadingState label="Loading settings…" rows={4} />;
+  }
   if (me.isError || settings.isError || usage.isError) {
     return (
       <p className="text-red-700" role="alert">
@@ -99,49 +102,67 @@ export function SettingsView() {
   return (
     <section className="space-y-8">
       <header>
-        <h1 className="text-3xl font-bold">Settings</h1>
-        <p className="mt-1 text-slate-600">Update your profile and default local schedule.</p>
+        <p className="eyebrow">Preferences</p>
+        <h1 className="mt-1 text-4xl font-semibold">Settings</h1>
+        <p className="mt-2 text-slate-600">Update your profile and default local schedule.</p>
       </header>
-      <form
-        className="max-w-2xl space-y-5 rounded-xl border border-slate-200 bg-white p-6"
-        onSubmit={submit}
-      >
-        <label className="block text-sm font-medium">
-          Display name
-          <input
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2"
-            maxLength={200}
-            onChange={(event) => setDisplayName(event.target.value)}
-            required
-            type="text"
-            value={resolvedDisplayName}
-          />
-        </label>
-        <label className="block text-sm font-medium">
-          Timezone
-          <input
-            aria-describedby="timezone-help"
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2"
-            maxLength={64}
-            onChange={(event) => setTimezone(event.target.value)}
-            required
-            type="text"
-            value={resolvedTimezone}
-          />
-        </label>
-        <p className="text-sm text-slate-500" id="timezone-help">
-          Use an IANA timezone, for example Europe/Berlin.
-        </p>
-        <label className="block text-sm font-medium">
-          Default daily run time
-          <input
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2"
-            onChange={(event) => setDefaultDailyTime(event.target.value)}
-            required
-            type="time"
-            value={resolvedDefaultDailyTime}
-          />
-        </label>
+      <form className="surface max-w-2xl space-y-6 p-6" onSubmit={submit}>
+        <section aria-labelledby="profile-heading" className="space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold" id="profile-heading">
+              Profile
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">How your account is identified.</p>
+          </div>
+          <label className="block text-sm font-medium">
+            Display name
+            <input
+              className="mt-1 block min-h-10 w-full rounded-xl border px-3 py-2"
+              maxLength={200}
+              onChange={(event) => setDisplayName(event.target.value)}
+              required
+              type="text"
+              value={resolvedDisplayName}
+            />
+          </label>
+          <label className="block text-sm font-medium">
+            Timezone
+            <input
+              aria-describedby="timezone-help"
+              className="mt-1 block min-h-10 w-full rounded-xl border px-3 py-2"
+              maxLength={64}
+              onChange={(event) => setTimezone(event.target.value)}
+              required
+              type="text"
+              value={resolvedTimezone}
+            />
+          </label>
+          <p className="text-sm text-slate-500" id="timezone-help">
+            Use an IANA timezone, for example Europe/Berlin.
+          </p>
+        </section>
+
+        <section
+          aria-labelledby="schedule-heading"
+          className="space-y-4 border-t border-slate-100 pt-6"
+        >
+          <div>
+            <h2 className="text-lg font-semibold" id="schedule-heading">
+              Default schedule
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">When new monitors run by default.</p>
+          </div>
+          <label className="block text-sm font-medium">
+            Default daily run time
+            <input
+              className="mt-1 block min-h-10 rounded-xl border px-3 py-2"
+              onChange={(event) => setDefaultDailyTime(event.target.value)}
+              required
+              type="time"
+              value={resolvedDefaultDailyTime}
+            />
+          </label>
+        </section>
         {validationError ? (
           <p className="text-sm text-red-700" role="alert">
             {validationError}
@@ -157,19 +178,20 @@ export function SettingsView() {
             Settings saved.
           </p>
         ) : null}
-        <button
-          className="rounded-lg bg-slate-950 px-4 py-2 font-medium text-white disabled:bg-slate-400"
-          disabled={update.isPending}
+        <Button
+          className="bg-[#d34d50] px-4 font-semibold text-white"
+          isDisabled={update.isPending}
           type="submit"
         >
           {update.isPending ? "Saving…" : "Save settings"}
-        </button>
+        </Button>
       </form>
 
       <section aria-labelledby="usage-heading" className="space-y-4">
         <div>
-          <h2 className="text-xl font-semibold" id="usage-heading">
-            Usage summary
+          <p className="eyebrow">Usage summary</p>
+          <h2 className="mt-1 text-xl font-semibold" id="usage-heading">
+            Usage
           </h2>
           <p className="mt-1 text-sm text-slate-600">
             Informational totals grouped by date and configured model.

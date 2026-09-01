@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -50,6 +50,17 @@ const run = {
 afterEach(() => vi.clearAllMocks());
 
 describe("findings pages", () => {
+  it("keeps advanced filters behind an accessible disclosure", async () => {
+    vi.mocked(apiGetClient).mockResolvedValueOnce({ items: [], next_cursor: null } as never);
+
+    renderWithQuery(<FindingsListView initialFilters={{}} />);
+
+    expect(await screen.findByText("No findings match these filters.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Category")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+    expect(screen.getByLabelText("Category")).toBeVisible();
+  });
+
   it("shows finding cards, filters, empty state, and errors", async () => {
     vi.mocked(apiGetClient).mockResolvedValueOnce({ items: [finding], next_cursor: null } as never);
     const success = renderWithQuery(
