@@ -1,0 +1,21 @@
+title = "Competitor Scout Gitleaks configuration"
+minVersion = "v8.25.0"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Test-only CSRF secret placeholder"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "line"
+paths = ['''^apps/backend/tests/conftest\.py$''']
+regexes = ['''^\s*"CSRF_SECRET": "test-csrf-secret-at-least-32-bytes-now",?\s*$''']
+
+[[allowlists]]
+description = "CI-only CSRF secret placeholder"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "line"
+paths = ['''^\.github/workflows/ci\.yml$''']
+regexes = ['''^\s*CSRF_SECRET: ci-csrf-secret-at-least-32-bytes-long\s*$''']
