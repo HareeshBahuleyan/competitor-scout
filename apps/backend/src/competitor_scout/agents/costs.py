@@ -15,13 +15,10 @@ class ConfiguredCostEstimator:
         self,
         model: str,
         _max_completion_tokens: int,
-        enable_web_search: bool,
+        _enable_web_search: bool,
     ) -> Decimal:
-        base = (
+        return (
             self._settings.estimated_child_request_cost_usd
             if model == self._settings.otari_child_model
             else self._settings.estimated_main_request_cost_usd
         )
-        if enable_web_search:
-            base += self._settings.estimated_web_search_cost_usd
-        return base

@@ -17,7 +17,6 @@ def settings() -> Settings:
         otari_ai_token="dummy-never-live",
         estimated_main_request_cost_usd=Decimal("0.12"),
         estimated_child_request_cost_usd=Decimal("0.04"),
-        estimated_web_search_cost_usd=Decimal("0.03"),
     )
 
 
@@ -26,5 +25,5 @@ def test_configured_estimator_is_conservative_and_model_specific() -> None:
     estimator = ConfiguredCostEstimator(configured)
 
     assert estimator(configured.otari_main_model, 4000, False) == Decimal("0.12")
-    assert estimator(configured.otari_child_model, 3000, True) == Decimal("0.07")
+    assert estimator(configured.otari_child_model, 3000, True) == Decimal("0.04")
     assert estimator("unknown-model", 1, False) == Decimal("0.12")
