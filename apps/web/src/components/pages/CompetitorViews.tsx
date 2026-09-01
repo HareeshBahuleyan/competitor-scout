@@ -2,20 +2,23 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { CompetitorForm, type CompetitorFormValues } from "@/components/CompetitorForm";
 import { FindingCard } from "@/components/FindingCard";
+import { MonitorSettings } from "@/components/MonitorSettings";
+import { runTypeLabel } from "@/components/RunOutcomeSummary";
 import { SetupStepper } from "@/components/SetupStepper";
 import { SourceApprovalList } from "@/components/SourceApprovalList";
 import { SourceSelectionList } from "@/components/SourceSelectionList";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { apiGetClient, apiMutate } from "@/lib/api";
+import { meQueryOptions } from "@/lib/current-user";
 import {
   competitorPageSchema,
   competitorSchema,
   findingPageSchema,
-  meSchema,
   runPageSchema,
   runSchema,
   settingsSchema,
@@ -111,7 +114,7 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
   const [manualSourceUrl, setManualSourceUrl] = useState("");
   const [manualSourceAdded, setManualSourceAdded] = useState(false);
   const [deselectedSourceIds, setDeselectedSourceIds] = useState<Set<string>>(new Set());
-  const me = useQuery({ queryKey: ["me"], queryFn: () => apiGetClient("/api/v1/me", meSchema) });
+  const me = useQuery(meQueryOptions);
   const settings = useQuery({
     queryKey: ["settings"],
     queryFn: () => apiGetClient("/api/v1/settings", settingsSchema),
@@ -416,10 +419,11 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
 
 export function CompetitorDetailView({ competitorId }: { competitorId: string }) {
   const client = useQueryClient();
+  const router = useRouter();
   const [pendingSourceId, setPendingSourceId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [discoveryRunId, setDiscoveryRunId] = useState<string | null>(null);
-  const me = useQuery({ queryKey: ["me"], queryFn: () => apiGetClient("/api/v1/me", meSchema) });
+  const me = useQuery(meQueryOptions);
   const competitor = useQuery({
     queryKey: ["competitor", competitorId],
     queryFn: () => apiGetClient(`/api/v1/competitors/${competitorId}`, competitorSchema),
@@ -502,18 +506,53 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
     },
     onSettled: () => setPendingSourceId(null),
   });
-  const activate = useMutation({
-    mutationFn: async () => {
+  const updateMonitor = useMutation({
+    mutationFn: async (body: {
+      daily_run_time_local?: string;
+      description?: string;
+      name?: string;
+      status?: "active" | "paused";
+    }) => {
       if (!me.data) throw new Error("Account information is unavailable.");
       return apiMutate(
         `/api/v1/competitors/${competitorId}`,
-        { body: { status: "active" }, csrfToken: me.data.csrf_token, method: "PATCH" },
+        { body, csrfToken: me.data.csrf_token, method: "PATCH" },
         competitorSchema,
       );
     },
     onSuccess: (updated) => {
       if (updated) client.setQueryData<Competitor>(["competitor", competitorId], updated);
-      setNotice("Daily monitoring activated.");
+      void client.invalidateQueries({ queryKey: ["competitors"] });
+      void client.invalidateQueries({ queryKey: ["dashboard"] });
+      setNotice("Monitor updated.");
+    },
+  });
+  const addManualSource = useMutation({
+    mutationFn: async (url: string) => {
+      if (!me.data) throw new Error("Account information is unavailable.");
+      return apiMutate(
+        `/api/v1/competitors/${competitorId}/sources`,
+        { body: { url }, csrfToken: me.data.csrf_token, method: "POST" },
+        sourceSchema,
+      );
+    },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["competitor-sources", competitorId] });
+      setNotice("Source added for review.");
+    },
+  });
+  const archiveMonitor = useMutation({
+    mutationFn: async () => {
+      if (!me.data) throw new Error("Account information is unavailable.");
+      await apiMutate(`/api/v1/competitors/${competitorId}`, {
+        csrfToken: me.data.csrf_token,
+        method: "DELETE",
+      });
+    },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["competitors"] });
+      void client.invalidateQueries({ queryKey: ["dashboard"] });
+      router.push("/competitors");
     },
   });
   const runNow = useMutation({
@@ -569,22 +608,43 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
           >
             Run now
           </button>
-          <button
-            className="rounded-lg bg-slate-950 px-4 py-2 font-medium text-white disabled:bg-slate-400"
-            disabled={!hasApproved || competitor.data.status === "active" || activate.isPending}
-            onClick={() => activate.mutate()}
-            type="button"
-          >
-            Activate monitoring
-          </button>
         </div>
       </header>
       {discoveryNotice || notice ? <p role="status">{discoveryNotice || notice}</p> : null}
-      {sourceUpdate.isError || activate.isError || runNow.isError || discovery.isError ? (
+      {sourceUpdate.isError ||
+      updateMonitor.isError ||
+      addManualSource.isError ||
+      archiveMonitor.isError ||
+      runNow.isError ||
+      discovery.isError ? (
         <p className="text-red-700" role="alert">
-          {errorText(sourceUpdate.error ?? activate.error ?? runNow.error ?? discovery.error)}
+          {errorText(
+            sourceUpdate.error ??
+              updateMonitor.error ??
+              addManualSource.error ??
+              archiveMonitor.error ??
+              runNow.error ??
+              discovery.error,
+          )}
         </p>
       ) : null}
+      <MonitorSettings
+        competitor={competitor.data}
+        hasApprovedSource={hasApproved}
+        isPending={updateMonitor.isPending || addManualSource.isPending || archiveMonitor.isPending}
+        onAddSource={async (url) => {
+          await addManualSource.mutateAsync(url);
+        }}
+        onArchive={async () => {
+          await archiveMonitor.mutateAsync();
+        }}
+        onSave={async (values) => {
+          await updateMonitor.mutateAsync(values);
+        }}
+        onStatusChange={async (status) => {
+          await updateMonitor.mutateAsync({ status });
+        }}
+      />
       {sources.data.items.length ? (
         <SourceApprovalList
           disabled={sourceUpdate.isPending}
@@ -625,11 +685,19 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
           <input name="competitor_id" type="hidden" value={competitorId} />
           <label className="text-sm font-medium">
             Category
-            <input
+            <select
               className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2"
               name="category"
-              type="text"
-            />
+            >
+              <option value="">All categories</option>
+              <option value="pricing">Pricing</option>
+              <option value="product">Product</option>
+              <option value="positioning">Positioning</option>
+              <option value="partnership">Partnership</option>
+              <option value="hiring">Hiring</option>
+              <option value="traction">Traction</option>
+              <option value="other">Other</option>
+            </select>
           </label>
           <label className="text-sm font-medium">
             Significance
@@ -660,7 +728,7 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
         {findings.data.items.length ? (
           <div className="space-y-3">
             {findings.data.items.map((finding) => (
-              <FindingCard finding={finding} key={finding.id} />
+              <FindingCard finding={finding} key={finding.id} timeZone={me.data.timezone} />
             ))}
           </div>
         ) : (
@@ -681,9 +749,12 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
             {recentRuns.data.items.map((run) => (
               <li className="surface surface-interactive p-4" key={run.id}>
                 <Link className="font-medium capitalize hover:underline" href={`/runs/${run.id}`}>
-                  {run.run_type.replaceAll("_", " ")}
+                  {runTypeLabel(run.run_type)}
                 </Link>
                 <span className="ml-3 text-sm capitalize text-slate-500">{run.status}</span>
+                <span className="ml-3 text-sm text-slate-500">
+                  {run.finding_count} {run.finding_count === 1 ? "finding" : "findings"}
+                </span>
                 {run.partial_reasons.length ? (
                   <p className="mt-2 text-sm text-amber-700">{run.partial_reasons.join("; ")}</p>
                 ) : null}

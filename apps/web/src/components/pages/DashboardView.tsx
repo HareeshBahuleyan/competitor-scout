@@ -8,6 +8,7 @@ import { useEffect } from "react";
 import { FindingCard } from "@/components/FindingCard";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { apiGetClient } from "@/lib/api";
+import { meQueryOptions } from "@/lib/current-user";
 import {
   competitorPageSchema,
   findingPageSchema,
@@ -30,6 +31,7 @@ function latestRunFor(competitorId: string, runs: Run[]) {
 
 export function DashboardView() {
   const router = useRouter();
+  const me = useQuery(meQueryOptions);
   const competitors = useQuery({
     queryKey: ["dashboard", "competitors"],
     queryFn: () => apiGetClient("/api/v1/competitors?limit=100", competitorPageSchema),
@@ -61,7 +63,7 @@ export function DashboardView() {
     }
   }, [competitors.data?.items.length, router]);
 
-  const queries = [competitors, criticalFindings, highFindings, mediumFindings, runs, briefs];
+  const queries = [me, competitors, criticalFindings, highFindings, mediumFindings, runs, briefs];
   if (queries.some((query) => query.isPending)) {
     return <LoadingState label="Loading dashboard…" rows={5} />;
   }
@@ -85,7 +87,8 @@ export function DashboardView() {
     !highFindingPage ||
     !mediumFindingPage ||
     !runPage ||
-    !briefPage
+    !briefPage ||
+    !me.data
   ) {
     return (
       <p className="text-red-700" role="alert">
@@ -115,7 +118,7 @@ export function DashboardView() {
       <header className="flex flex-wrap items-end justify-between gap-5">
         <div>
           <p className="eyebrow">Intelligence overview</p>
-          <h1 className="mt-1.5 text-4xl font-semibold">Dashboard</h1>
+          <h1 className="mt-1.5 text-4xl font-semibold">Overview</h1>
           <p className="mt-2 max-w-2xl text-slate-600">
             The signals that matter, without the noise.
           </p>
@@ -133,23 +136,21 @@ export function DashboardView() {
 
       <div className="grid gap-3 sm:grid-cols-3">
         <article className="surface p-4">
-          <p className="text-xs font-medium text-slate-500">Active monitors</p>
+          <p className="text-xs font-medium text-slate-500">Monitoring</p>
           <div className="mt-2 flex items-end justify-between gap-3">
             <p className="text-3xl font-semibold tracking-[-0.04em]">{activeCompetitors.length}</p>
-            <span className="mb-1 flex items-center gap-1.5 text-xs text-emerald-700">
-              <span className="size-1.5 rounded-full bg-emerald-500" /> Live
-            </span>
+            <span className="mb-1 text-xs text-slate-500">Daily monitors</span>
           </div>
         </article>
         <article className="surface p-4">
-          <p className="text-xs font-medium text-slate-500">Material signals</p>
+          <p className="text-xs font-medium text-slate-500">Recent important changes</p>
           <div className="mt-2 flex items-end justify-between gap-3">
             <p className="text-3xl font-semibold tracking-[-0.04em]">{materialFindings.length}</p>
             <span className="mb-1 text-xs text-slate-500">Latest view</span>
           </div>
         </article>
         <article className="surface p-4">
-          <p className="text-xs font-medium text-slate-500">Runs to review</p>
+          <p className="text-xs font-medium text-slate-500">Monitoring issues</p>
           <div className="mt-2 flex items-end justify-between gap-3">
             <p className="text-3xl font-semibold tracking-[-0.04em]">{unhealthyRuns.length}</p>
             <span
@@ -205,7 +206,7 @@ export function DashboardView() {
           {materialFindings.length ? (
             <div className="space-y-3">
               {materialFindings.map((item) => (
-                <FindingCard finding={item} key={item.id} />
+                <FindingCard finding={item} key={item.id} timeZone={me.data.timezone} />
               ))}
             </div>
           ) : (

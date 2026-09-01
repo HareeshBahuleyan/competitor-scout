@@ -183,6 +183,8 @@ describe("audit schemas", () => {
     const base = {
       id: "44444444-4444-4444-8444-444444444444",
       competitor_id: null,
+      competitor_name: null,
+      finding_count: 0,
       run_type: "daily_scout",
       scheduled_for: "2026-08-21T08:00:00Z",
       started_at: null,

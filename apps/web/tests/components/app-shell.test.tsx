@@ -11,10 +11,9 @@ vi.mock("@/components/LogoutButton", () => ({
 }));
 
 const expectedNavigation = [
-  ["Dashboard", "/"],
+  ["Overview", "/"],
   ["Competitors", "/competitors"],
-  ["Findings", "/findings"],
-  ["Runs", "/runs"],
+  ["Intelligence", "/findings"],
   ["Briefs", "/briefs"],
   ["Settings", "/settings"],
 ] as const;
@@ -47,12 +46,20 @@ describe("AppShell", () => {
       </AppShell>,
     );
 
-    expect(screen.getByRole("link", { name: "Findings" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Intelligence" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
     expect(screen.getByRole("link", { name: "Add competitor" })).toHaveAttribute(
       "href",
       "/competitors/new",
     );
     expect(screen.getAllByRole("button", { name: "Log out" })).toHaveLength(2);
     expect(screen.getByText("Competitor Scout")).not.toHaveClass("truncate");
+    expect(
+      screen.getByRole("navigation", { name: "Primary navigation" }).querySelectorAll("a"),
+    ).toHaveLength(5);
+    expect(screen.queryByRole("link", { name: "Runs" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Scout is ready")).not.toBeInTheDocument();
   });
 });

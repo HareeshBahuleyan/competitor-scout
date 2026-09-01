@@ -1,5 +1,5 @@
 import { AppShell } from "@/components/AppShell";
-import { FindingsListView, type FindingFilters } from "@/components/pages/AuditViews";
+import { FindingsListView, type FindingFilters } from "@/components/pages/FindingsViews";
 
 const filterKeys = [
   "category",

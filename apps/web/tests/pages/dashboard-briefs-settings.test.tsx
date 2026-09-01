@@ -39,6 +39,8 @@ const finding = {
 const run = {
   id: finding.originating_scout_run_id,
   competitor_id: competitor.id,
+  competitor_name: competitor.name,
+  finding_count: 1,
   run_type: "daily_scout",
   status: "partial",
   scheduled_for: "2026-08-21T08:00:00Z",
@@ -103,6 +105,7 @@ function mockDashboard(data?: {
   briefs?: unknown[];
 }) {
   vi.mocked(apiGetClient).mockImplementation(async (path) => {
+    if (path === "/api/v1/me") return me as never;
     if (path.startsWith("/api/v1/competitors"))
       return { items: data?.competitors ?? [competitor], next_cursor: null } as never;
     if (path.startsWith("/api/v1/findings")) {
@@ -156,11 +159,12 @@ describe("dashboard", () => {
       ],
     });
     renderWithQuery(<DashboardView />);
-    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Overview" })).toBeInTheDocument();
     expect(screen.getByText("Intelligence overview")).toBeInTheDocument();
-    expect(screen.getByText("Active monitors")).toBeInTheDocument();
-    expect(screen.getByText("Material signals")).toBeInTheDocument();
-    expect(screen.getByText("Runs to review")).toBeInTheDocument();
+    expect(screen.getByText("Monitoring")).toBeInTheDocument();
+    expect(screen.getByText("Recent important changes")).toBeInTheDocument();
+    expect(screen.getByText("Monitoring issues")).toBeInTheDocument();
+    expect(screen.queryByText("Live")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Add competitor" })).toHaveAttribute(
       "href",
       "/competitors/new",
