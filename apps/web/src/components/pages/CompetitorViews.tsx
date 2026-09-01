@@ -6,7 +6,9 @@ import { useEffect, useState } from "react";
 
 import { CompetitorForm, type CompetitorFormValues } from "@/components/CompetitorForm";
 import { FindingCard } from "@/components/FindingCard";
+import { SetupStepper } from "@/components/SetupStepper";
 import { SourceApprovalList } from "@/components/SourceApprovalList";
+import { SourceSelectionList } from "@/components/SourceSelectionList";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { apiGetClient, apiMutate } from "@/lib/api";
 import {
@@ -16,9 +18,11 @@ import {
   meSchema,
   runPageSchema,
   runSchema,
+  settingsSchema,
   sourceDiscoveryResponseSchema,
   sourcePageSchema,
   sourceSchema,
+  startMonitoringResponseSchema,
   type Competitor,
   type CursorPage,
   type Source,
@@ -79,6 +83,14 @@ export function CompetitorsListView() {
               <p className="mt-2 text-sm text-slate-600">
                 {item.description || item.primary_domain}
               </p>
+              {item.status === "discovering" ? (
+                <Link
+                  className="mt-3 inline-flex text-sm font-semibold text-blue-700 hover:underline"
+                  href={`/competitors/${item.id}`}
+                >
+                  Finish setup →
+                </Link>
+              ) : null}
             </li>
           ))}
         </ul>
@@ -92,11 +104,18 @@ const terminalStatuses = new Set(["completed", "partial", "failed"]);
 
 export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewProps) {
   const client = useQueryClient();
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [created, setCreated] = useState<Competitor | null>(null);
-  const [runId, setRunId] = useState<string | null>(null);
-  const [pendingSourceId, setPendingSourceId] = useState<string | null>(null);
-  const [sourceError, setSourceError] = useState<unknown>(null);
+  const [discoveryRunId, setDiscoveryRunId] = useState<string | null>(null);
+  const [firstScanRunId, setFirstScanRunId] = useState<string | null>(null);
+  const [manualSourceUrl, setManualSourceUrl] = useState("");
+  const [manualSourceAdded, setManualSourceAdded] = useState(false);
+  const [deselectedSourceIds, setDeselectedSourceIds] = useState<Set<string>>(new Set());
   const me = useQuery({ queryKey: ["me"], queryFn: () => apiGetClient("/api/v1/me", meSchema) });
+  const settings = useQuery({
+    queryKey: ["settings"],
+    queryFn: () => apiGetClient("/api/v1/settings", settingsSchema),
+  });
   const discovery = useMutation({
     mutationFn: async (competitorId: string) => {
       if (!me.data) throw new Error("Account information is unavailable.");
@@ -111,7 +130,7 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
       if (!result) throw new Error("The discovery response was empty.");
       return result;
     },
-    onSuccess: (result) => setRunId(result.run_id),
+    onSuccess: (result) => setDiscoveryRunId(result.run_id),
   });
   const create = useMutation({
     mutationFn: async (values: CompetitorFormValues) => {
@@ -130,63 +149,107 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
     },
     onSuccess: (result) => {
       setCreated(result);
+      setStep(2);
       void client.invalidateQueries({ queryKey: ["competitors"] });
       discovery.mutate(result.id);
     },
   });
-  const run = useQuery({
-    enabled: Boolean(runId),
-    queryKey: ["run", runId],
-    queryFn: () => apiGetClient(`/api/v1/runs/${runId}`, runSchema),
+  const discoveryRun = useQuery({
+    enabled: Boolean(discoveryRunId),
+    queryKey: ["run", discoveryRunId],
+    queryFn: () => apiGetClient(`/api/v1/runs/${discoveryRunId}`, runSchema),
     refetchInterval: (query) =>
       terminalStatuses.has(query.state.data?.status ?? "")
         ? false
         : Math.min(pollIntervalMs * 2 ** query.state.dataUpdateCount, 10_000),
   });
   const canLoadSources = Boolean(
-    created && run.data && (run.data.status === "completed" || run.data.status === "partial"),
+    created &&
+    (manualSourceAdded ||
+      discoveryRun.data?.status === "completed" ||
+      discoveryRun.data?.status === "partial"),
   );
   const sources = useQuery({
     enabled: canLoadSources,
     queryKey: ["competitor-sources", created?.id],
     queryFn: () => apiGetClient(`/api/v1/competitors/${created?.id}/sources`, sourcePageSchema),
   });
-  const activate = useMutation({
+  const selectedSourceIds = new Set(
+    (sources.data?.items ?? [])
+      .filter((source) => !deselectedSourceIds.has(source.id))
+      .map((source) => source.id),
+  );
+
+  const addSource = useMutation({
     mutationFn: async () => {
       if (!created || !me.data) throw new Error("Account information is unavailable.");
-      return apiMutate(
-        `/api/v1/competitors/${created.id}`,
-        { body: { status: "active" }, csrfToken: me.data.csrf_token, method: "PATCH" },
-        competitorSchema,
-      );
-    },
-    onSuccess: (updated) => {
-      if (updated) setCreated(updated);
-    },
-  });
-  async function updateSource(sourceId: string, approval_status: "approved" | "rejected") {
-    if (!created || !me.data) return;
-    setPendingSourceId(sourceId);
-    setSourceError(null);
-    try {
-      await apiMutate(
-        `/api/v1/competitors/${created.id}/sources/${sourceId}`,
-        { body: { approval_status }, csrfToken: me.data.csrf_token, method: "PATCH" },
+      const result = await apiMutate(
+        `/api/v1/competitors/${created.id}/sources`,
+        {
+          body: { url: manualSourceUrl.trim() },
+          csrfToken: me.data.csrf_token,
+          method: "POST",
+        },
         sourceSchema,
       );
+      if (!result) throw new Error("The source response was empty.");
+      return result;
+    },
+    onSuccess: async (source) => {
+      setManualSourceAdded(true);
+      setManualSourceUrl("");
+      setDeselectedSourceIds((current) => {
+        const next = new Set(current);
+        next.delete(source.id);
+        return next;
+      });
       await sources.refetch();
-    } catch (error) {
-      setSourceError(error);
-    } finally {
-      setPendingSourceId(null);
-    }
+    },
+  });
+  const startMonitoring = useMutation({
+    mutationFn: async (sourceIds: string[]) => {
+      if (!created || !me.data) throw new Error("Account information is unavailable.");
+      const result = await apiMutate(
+        `/api/v1/competitors/${created.id}/start-monitoring`,
+        {
+          body: { source_ids: sourceIds, run_initial_scan: true },
+          csrfToken: me.data.csrf_token,
+          method: "POST",
+        },
+        startMonitoringResponseSchema,
+      );
+      if (!result) throw new Error("The monitoring response was empty.");
+      return result;
+    },
+    onSuccess: (result) => {
+      setCreated(result.competitor);
+      setFirstScanRunId(result.run?.id ?? null);
+      setStep(3);
+      void client.invalidateQueries({ queryKey: ["competitors"] });
+    },
+  });
+  const firstScan = useQuery({
+    enabled: Boolean(firstScanRunId),
+    queryKey: ["run", firstScanRunId],
+    queryFn: () => apiGetClient(`/api/v1/runs/${firstScanRunId}`, runSchema),
+    refetchInterval: (query) =>
+      terminalStatuses.has(query.state.data?.status ?? "") ? false : pollIntervalMs,
+  });
+
+  function toggleSource(sourceId: string) {
+    setDeselectedSourceIds((current) => {
+      const next = new Set(current);
+      if (next.has(sourceId)) next.delete(sourceId);
+      else next.add(sourceId);
+      return next;
+    });
   }
 
-  if (me.isPending) return <LoadingState label="Loading account…" rows={3} />;
-  if (me.isError)
+  if (me.isPending || settings.isPending) return <LoadingState label="Loading account…" rows={3} />;
+  if (me.isError || settings.isError)
     return (
       <p className="text-red-700" role="alert">
-        {errorText(me.error)}
+        {errorText(me.error ?? settings.error)}
       </p>
     );
   return (
@@ -194,13 +257,18 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
       <div>
         <p className="eyebrow">New monitor</p>
         <h1 className="mt-1 text-4xl font-semibold">Add competitor</h1>
-        <p className="mt-2 text-slate-600">Create a profile, then review its discovered sources.</p>
+        <p className="mt-2 text-slate-600">
+          Choose a competitor, confirm trusted sources, and run an initial scan.
+        </p>
       </div>
-      {!created ? (
+      <SetupStepper currentStep={step} />
+      {step === 1 ? (
         <div className="surface max-w-2xl p-6">
           <CompetitorForm
+            initialValues={{ daily_run_time_local: settings.data.default_daily_time }}
             isSubmitting={create.isPending}
             onSubmit={(values) => create.mutateAsync(values).then(() => undefined)}
+            submitLabel="Continue to sources"
           />
         </div>
       ) : null}
@@ -209,77 +277,138 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
           {errorText(create.error)}
         </p>
       ) : null}
-      {discovery.isPending || (runId && run.isPending) ? (
-        <LoadingState label="Discovering sources…" rows={2} />
-      ) : null}
-      {discovery.isError ? (
-        <div className="space-y-3" role="alert">
-          <p>{errorText(discovery.error)}</p>
+      {step === 2 ? (
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-2xl font-semibold">Choose trusted sources</h2>
+            <p className="mt-1 text-slate-600">
+              We only monitor first-party pages you select. You can change these later.
+            </p>
+          </div>
+          {discovery.isPending || (discoveryRunId && discoveryRun.isPending) ? (
+            <LoadingState label="Finding first-party sources…" rows={2} />
+          ) : null}
+          {discovery.isError ? (
+            <div className="space-y-3 text-red-700" role="alert">
+              <p>{errorText(discovery.error)}</p>
+              <button
+                className="rounded-lg border border-red-300 px-4 py-2 font-medium"
+                onClick={() => created && discovery.mutate(created.id)}
+                type="button"
+              >
+                Retry source discovery
+              </button>
+            </div>
+          ) : null}
+          {discoveryRun.isError ? (
+            <p className="text-red-700" role="alert">
+              {errorText(discoveryRun.error)}
+            </p>
+          ) : null}
+          {discoveryRun.data?.status === "failed" ? (
+            <p className="text-red-700" role="alert">
+              {discoveryRun.data.failure_summary || "Source discovery failed."}
+            </p>
+          ) : null}
+          {canLoadSources && sources.isPending ? (
+            <LoadingState label="Loading suggested sources…" rows={2} />
+          ) : null}
+          {sources.isError ? (
+            <p className="text-red-700" role="alert">
+              {errorText(sources.error)}
+            </p>
+          ) : null}
+          {sources.data?.items.length ? (
+            <SourceSelectionList
+              disabled={startMonitoring.isPending}
+              onToggle={toggleSource}
+              selectedSourceIds={selectedSourceIds}
+              sources={sources.data.items}
+            />
+          ) : canLoadSources && !sources.isPending ? (
+            <p className="empty-state p-5">No sources were found. Add a trusted URL below.</p>
+          ) : null}
+          <form
+            className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-end"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (manualSourceUrl.trim()) addSource.mutate();
+            }}
+          >
+            <label className="min-w-0 flex-1 text-sm font-medium">
+              Add a first-party source
+              <input
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                disabled={addSource.isPending}
+                onChange={(event) => setManualSourceUrl(event.target.value)}
+                placeholder={`https://${created?.primary_domain ?? "example.com"}/pricing`}
+                type="url"
+                value={manualSourceUrl}
+              />
+            </label>
+            <button
+              className="rounded-lg border border-slate-300 px-4 py-2 font-semibold disabled:text-slate-400"
+              disabled={!manualSourceUrl.trim() || addSource.isPending}
+              type="submit"
+            >
+              {addSource.isPending ? "Adding…" : "Add source"}
+            </button>
+          </form>
+          {addSource.isError ? (
+            <p className="text-red-700" role="alert">
+              {errorText(addSource.error)}
+            </p>
+          ) : null}
           <button
-            className="rounded-lg border border-slate-300 px-4 py-2 font-medium"
-            onClick={() => created && discovery.mutate(created.id)}
+            className="rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white disabled:bg-slate-400"
+            disabled={!selectedSourceIds.size || startMonitoring.isPending}
+            onClick={() => startMonitoring.mutate([...selectedSourceIds])}
             type="button"
           >
-            Retry source discovery
+            {startMonitoring.isPending
+              ? "Starting monitoring…"
+              : "Start monitoring & run first scan"}
           </button>
+          {startMonitoring.isError ? (
+            <p className="text-red-700" role="alert">
+              {errorText(startMonitoring.error)}
+            </p>
+          ) : null}
         </div>
       ) : null}
-      {run.isError ? (
-        <p className="text-red-700" role="alert">
-          {errorText(run.error)}
-        </p>
-      ) : null}
-      {run.data?.status === "failed" ? (
-        <p className="text-red-700" role="alert">
-          {run.data.failure_summary || "Source discovery failed."}
-        </p>
-      ) : null}
-      {run.data?.status === "completed" ? <p role="status">Discovery completed.</p> : null}
-      {run.data?.status === "partial" ? (
-        <p role="status">
-          Discovery completed with partial results:{" "}
-          {run.data.partial_reasons.join("; ") || "some sources were unavailable"}.
-        </p>
-      ) : null}
-      {canLoadSources && sources.isPending ? (
-        <LoadingState label="Loading discovered sources…" rows={2} />
-      ) : null}
-      {sources.isError ? (
-        <p className="text-red-700" role="alert">
-          {errorText(sources.error)}
-        </p>
-      ) : null}
-      {sourceError ? (
-        <p className="text-red-700" role="alert">
-          {errorText(sourceError)}
-        </p>
-      ) : null}
-      {sources.data?.items.length === 0 ? <p>No sources were discovered.</p> : null}
-      {sources.data?.items.length ? (
-        <SourceApprovalList
-          onUpdate={updateSource}
-          pendingSourceId={pendingSourceId}
-          sources={sources.data.items}
-        />
-      ) : null}
-      {canLoadSources ? (
-        <button
-          className="rounded-lg bg-slate-950 px-4 py-2 font-medium text-white disabled:bg-slate-400"
-          disabled={
-            !sources.data?.items.some((item) => item.approval_status === "approved") ||
-            activate.isPending
-          }
-          onClick={() => activate.mutate()}
-          type="button"
-        >
-          Activate daily monitoring
-        </button>
-      ) : null}
-      {activate.isSuccess ? <p role="status">Daily monitoring activated.</p> : null}
-      {activate.isError ? (
-        <p className="text-red-700" role="alert">
-          {errorText(activate.error)}
-        </p>
+      {step === 3 ? (
+        <div className="surface max-w-2xl space-y-4 p-6">
+          <h2 className="text-2xl font-semibold">Your monitor is active</h2>
+          {firstScan.isPending ? <LoadingState label="Running the first scan…" rows={3} /> : null}
+          {firstScan.data && !terminalStatuses.has(firstScan.data.status) ? (
+            <p role="status" className="capitalize">
+              First scan: {firstScan.data.status}…
+            </p>
+          ) : null}
+          {firstScan.data?.status === "completed" || firstScan.data?.status === "partial" ? (
+            <p role="status">First scan complete.</p>
+          ) : null}
+          {firstScan.data?.status === "failed" || firstScan.isError ? (
+            <p className="text-red-700" role="alert">
+              {firstScan.data?.failure_summary ||
+                errorText(firstScan.error) ||
+                "First scan failed."}
+            </p>
+          ) : null}
+          <div className="flex flex-wrap gap-3">
+            <Link className="rounded-lg bg-slate-950 px-4 py-2 font-semibold text-white" href="/">
+              Go to dashboard
+            </Link>
+            {firstScanRunId ? (
+              <Link
+                className="rounded-lg border border-slate-300 px-4 py-2 font-semibold"
+                href={`/runs/${firstScanRunId}`}
+              >
+                View scan details
+              </Link>
+            ) : null}
+          </div>
+        </div>
       ) : null}
     </section>
   );

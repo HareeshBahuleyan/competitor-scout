@@ -221,6 +221,11 @@ export const runUsageSchema = z.object({
 
 export const sourceDiscoveryResponseSchema = z.object({ run_id: z.string().uuid() });
 
+export const startMonitoringResponseSchema = z.object({
+  competitor: competitorSchema,
+  run: runSchema.nullable(),
+});
+
 export const briefFindingReferenceSchema = z.object({
   finding_id: z.string().uuid(),
   statement: z.string().min(1).max(2_000),
