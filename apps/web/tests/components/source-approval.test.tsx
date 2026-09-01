@@ -63,13 +63,13 @@ describe("SourceApprovalList", () => {
     expect(screen.getByRole("button", { name: "Reject Pricing" })).toBeDisabled();
   });
 
-  it("explains the approval required for activation", () => {
+  it("explains that source approval and monitoring activation are separate", () => {
     const { rerender } = render(
       <SourceApprovalList onUpdate={vi.fn()} sources={[pricingSource]} />,
     );
 
     expect(
-      screen.getByText("Approve at least one source to activate daily monitoring."),
+      screen.getByText("Approve at least one trusted source before activating monitoring."),
     ).toBeVisible();
 
     rerender(
@@ -78,6 +78,6 @@ describe("SourceApprovalList", () => {
         sources={[{ ...pricingSource, approval_status: "approved" }]}
       />,
     );
-    expect(screen.getByText("Daily monitoring is active.")).toBeVisible();
+    expect(screen.getByText("At least one trusted source is approved.")).toBeVisible();
   });
 });

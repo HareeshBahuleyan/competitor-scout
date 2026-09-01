@@ -13,6 +13,7 @@ type CompetitorFormProps = {
   initialValues?: Partial<CompetitorFormValues>;
   isSubmitting?: boolean;
   onSubmit: (values: CompetitorFormValues) => Promise<void> | void;
+  submitLabel?: string;
 };
 
 type FormErrors = Partial<Record<"name" | "primary_domain", string>>;
@@ -40,6 +41,7 @@ export function CompetitorForm({
   initialValues,
   isSubmitting = false,
   onSubmit,
+  submitLabel = "Save competitor",
 }: CompetitorFormProps) {
   const [values, setValues] = useState({
     name: initialValues?.name ?? "",
@@ -162,7 +164,7 @@ export function CompetitorForm({
         disabled={isSubmitting}
         type="submit"
       >
-        {isSubmitting ? "Saving competitor…" : "Save competitor"}
+        {isSubmitting ? "Saving competitor…" : submitLabel}
       </button>
     </form>
   );

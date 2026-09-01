@@ -26,6 +26,113 @@ test("renders the private-alpha authentication entry point", async ({ page }) =>
   );
 });
 
+test("guides a new user through sources and the first scan", async ({ page }) => {
+  await mockAuthenticatedUser(page);
+  const competitorId = "11111111-1111-4111-8111-111111111111";
+  const sourceId = "22222222-2222-4222-8222-222222222222";
+  const discoveryRunId = "33333333-3333-4333-8333-333333333333";
+  const firstScanRunId = "44444444-4444-4444-8444-444444444444";
+  const competitor = {
+    id: competitorId,
+    name: "Acme",
+    primary_domain: "acme.example",
+    description: "Widgets",
+    status: "discovering",
+    daily_run_time_local: "06:45:00",
+    created_at: "2026-08-21T08:00:00Z",
+    updated_at: "2026-08-21T08:00:00Z",
+  };
+  const completedRun = (id: string, runType: string) => ({
+    id,
+    competitor_id: competitorId,
+    run_type: runType,
+    status: "completed",
+    scheduled_for: "2026-08-21T08:00:00Z",
+    started_at: "2026-08-21T08:00:01Z",
+    completed_at: "2026-08-21T08:01:00Z",
+    failure_code: null,
+    failure_summary: null,
+    partial_reasons: [],
+    input_tokens: 100,
+    output_tokens: 50,
+    tool_calls: 1,
+    settled_cost_usd: "0.012000",
+    created_at: "2026-08-21T08:00:00Z",
+  });
+  await page.route("**/api/v1/settings", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      json: {
+        display_name: "Founder",
+        timezone: "Europe/Berlin",
+        default_daily_time: "06:45:00",
+      },
+    }),
+  );
+  await page.route("**/api/v1/competitors", (route) =>
+    route.fulfill({ contentType: "application/json", json: competitor, status: 201 }),
+  );
+  await page.route(`**/api/v1/competitors/${competitorId}/discover-sources`, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      json: { run_id: discoveryRunId },
+      status: 202,
+    }),
+  );
+  await page.route(`**/api/v1/runs/${discoveryRunId}`, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      json: completedRun(discoveryRunId, "source_discovery"),
+    }),
+  );
+  await page.route(`**/api/v1/competitors/${competitorId}/sources`, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      json: {
+        items: [
+          {
+            id: sourceId,
+            url: "https://acme.example/pricing",
+            source_category: "pricing",
+            title: "Pricing",
+            discovery_reason: "Official pricing page",
+            approval_status: "suggested",
+            created_at: "2026-08-21T08:00:00Z",
+            updated_at: "2026-08-21T08:00:00Z",
+          },
+        ],
+        next_cursor: null,
+      },
+    }),
+  );
+  await page.route(`**/api/v1/competitors/${competitorId}/start-monitoring`, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      json: {
+        competitor: { ...competitor, status: "active" },
+        run: completedRun(firstScanRunId, "manual_scout"),
+      },
+      status: 202,
+    }),
+  );
+  await page.route(`**/api/v1/runs/${firstScanRunId}`, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      json: completedRun(firstScanRunId, "manual_scout"),
+    }),
+  );
+
+  await page.goto("/competitors/new");
+  await expect(page.getByLabel("Daily run time")).toHaveValue("06:45");
+  await page.getByLabel("Competitor name").fill("Acme");
+  await page.getByLabel("Primary domain").fill("acme.example");
+  await page.getByRole("button", { name: "Continue to sources" }).click();
+  await expect(page.getByRole("checkbox", { name: "Monitor Pricing" })).toBeChecked();
+  await page.getByRole("button", { name: "Start monitoring & run first scan" }).click();
+  await expect(page.getByText("First scan complete.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Go to dashboard" })).toHaveAttribute("href", "/");
+});
+
 test("audits a completed run without rendering internal fields", async ({ page }) => {
   await mockAuthenticatedUser(page);
   const runId = "11111111-1111-4111-8111-111111111111";

@@ -4,13 +4,14 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 from competitor_scout.models.intelligence import ApprovalStatus, CompetitorStatus, SourceCategory
+from competitor_scout.schemas.runs import RunRead
 
 
 class CompetitorCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     primary_domain: str = Field(min_length=3, max_length=2048)
     description: str = Field(default="", max_length=2000)
-    daily_run_time_local: time = time(hour=8)
+    daily_run_time_local: time | None = None
 
 
 class CompetitorUpdate(BaseModel):
@@ -71,3 +72,21 @@ class SourceApprovalUpdate(BaseModel):
         if value is ApprovalStatus.SUGGESTED:
             raise ValueError("approval_status must be approved or rejected")
         return value
+
+
+class SourceCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    url: str = Field(min_length=1, max_length=2048)
+
+
+class StartMonitoringRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_ids: list[UUID] = Field(min_length=1, max_length=100)
+    run_initial_scan: bool = True
+
+
+class StartMonitoringResponse(BaseModel):
+    competitor: CompetitorRead
+    run: RunRead | None

@@ -12,7 +12,10 @@ from competitor_scout.schemas.competitors import (
     CompetitorRead,
     CompetitorUpdate,
     SourceApprovalUpdate,
+    SourceCreate,
     SourceRead,
+    StartMonitoringRequest,
+    StartMonitoringResponse,
 )
 from competitor_scout.schemas.runs import RunRead
 from competitor_scout.services.competitors import (
@@ -22,9 +25,11 @@ from competitor_scout.services.competitors import (
     InvalidPrimaryDomain,
     SourceUrlNotAllowed,
     create_competitor,
+    create_manual_source,
     list_competitors,
     list_sources,
     owned_competitor,
+    select_monitoring_sources,
     soft_delete_competitor,
     update_competitor_status,
     update_source_approval,
@@ -59,7 +64,9 @@ async def create_competitor_route(
             name=payload.name,
             primary_domain=payload.primary_domain,
             description=payload.description,
-            daily_run_time_local=payload.daily_run_time_local,
+            daily_run_time_local=(
+                payload.daily_run_time_local or user.default_daily_run_time_local
+            ),
             limit=request.app.state.settings.max_active_competitors,
         )
     except DuplicateCompetitor:
@@ -170,6 +177,33 @@ async def list_sources_route(
     return CursorPage(items=page.items, next_cursor=page.next_cursor)
 
 
+@router.post(
+    "/{competitor_id}/sources",
+    response_model=SourceRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_source_route(
+    competitor_id: uuid.UUID,
+    payload: SourceCreate,
+    request: Request,
+    db: DbSession,
+    user: CurrentUser,
+    _csrf: CsrfRequired,
+) -> MonitoredSource:
+    competitor = await owned_competitor(db, user_id=user.id, competitor_id=competitor_id)
+    if competitor is None:
+        raise competitor_not_found()
+    try:
+        return await create_manual_source(
+            db,
+            competitor=competitor,
+            url=payload.url,
+            validator=request.app.state.source_url_validator,
+        )
+    except SourceUrlNotAllowed:
+        raise HTTPException(status_code=422, detail="source URL is not allowed") from None
+
+
 @router.patch("/{competitor_id}/sources/{source_id}", response_model=SourceRead)
 async def update_source_approval_route(
     competitor_id: uuid.UUID,
@@ -196,6 +230,49 @@ async def update_source_approval_route(
     if source is None:
         raise competitor_not_found()
     return source
+
+
+@router.post(
+    "/{competitor_id}/start-monitoring",
+    response_model=StartMonitoringResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def start_monitoring_route(
+    competitor_id: uuid.UUID,
+    payload: StartMonitoringRequest,
+    request: Request,
+    db: DbSession,
+    user: CurrentUser,
+    _csrf: CsrfRequired,
+) -> StartMonitoringResponse:
+    competitor = await owned_competitor(db, user_id=user.id, competitor_id=competitor_id)
+    if competitor is None:
+        raise competitor_not_found()
+    try:
+        await select_monitoring_sources(
+            db,
+            competitor=competitor,
+            source_ids=payload.source_ids,
+            validator=request.app.state.source_url_validator,
+        )
+        run = (
+            await enqueue_manual_run(
+                db,
+                user_id=user.id,
+                competitor_id=competitor.id,
+                now=utc_now(),
+            )
+            if payload.run_initial_scan
+            else None
+        )
+    except (CompetitorActivationNotAllowed, ManualRunNotAllowed):
+        raise HTTPException(status_code=422, detail="approved source required") from None
+    except SourceUrlNotAllowed:
+        raise HTTPException(status_code=422, detail="source URL is not allowed") from None
+    return StartMonitoringResponse(
+        competitor=CompetitorRead.model_validate(competitor),
+        run=run_read(run) if run is not None else None,
+    )
 
 
 @router.post(
