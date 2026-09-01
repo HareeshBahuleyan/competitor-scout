@@ -1,0 +1,37 @@
+minimum_pre_commit_version: "4.0.0"
+default_install_hook_types: [pre-commit]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # v6.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 1f1e8bf348ff38fc88619a38d3ca4d9c56abea49 # v0.16.5
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+        files: ^apps/backend/
+      - id: ruff-format
+        files: ^apps/backend/
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e # v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier
+        entry: prettier --write --ignore-unknown
+        language: node
+        additional_dependencies: [prettier@3.9.6]
+        files: ^apps/web/.*\.(css|json|js|jsx|md|mjs|ts|tsx|yaml|yml)$
+        exclude: ^apps/web/(next-env\.d\.ts|pnpm-lock\.yaml)$

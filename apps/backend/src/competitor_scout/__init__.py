@@ -1,0 +1,1 @@
+"""Competitor Scout backend."""

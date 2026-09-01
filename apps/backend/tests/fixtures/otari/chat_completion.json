@@ -1,0 +1,24 @@
+{
+  "id": "chatcmpl_synthetic_001",
+  "object": "chat.completion",
+  "created": 1787313600,
+  "model": "competitor-scout-main",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"tasks\":[{\"kind\":\"news_discovery\",\"objective\":\"Find recent public partnership announcements.\",\"source_urls\":[],\"search_query\":\"Example Analytics partnership announcement\",\"expected_category\":\"partnership\",\"max_search_calls\":2,\"completion_criteria\":\"Return directly quoted public reporting or no evidence.\"}]}"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 101,
+    "completion_tokens": 37,
+    "total_tokens": 138,
+    "tool_calls": null,
+    "cost_usd": 0.001234,
+    "pricing_source": "hosted_catalog"
+  }
+}

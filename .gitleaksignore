@@ -1,0 +1,3 @@
+# Verified test-only placeholders; not production credentials.
+00413822b3bfe4fcbae31ef7ee8a42a9eaf246f9:apps/backend/tests/conftest.py:generic-api-key:20
+e45859b347df6619344699ec065bcaed4b57bdec:.github/workflows/ci.yml:generic-api-key:75
