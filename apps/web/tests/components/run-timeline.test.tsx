@@ -34,6 +34,7 @@ describe("RunTimeline", () => {
       expect.stringContaining("Gathering"),
     ]);
     expect(screen.getByText("Partial")).toBeVisible();
+    expect(screen.getByText("Usage details").closest("details")).toBeInTheDocument();
     expect(screen.getByText("Child task failed")).toBeVisible();
     expect(screen.getByText("Source unavailable")).toBeVisible();
     expect(screen.getByText("Retries")).toHaveTextContent("1");

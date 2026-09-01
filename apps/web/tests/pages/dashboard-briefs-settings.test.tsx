@@ -146,6 +146,14 @@ describe("dashboard", () => {
     });
     renderWithQuery(<DashboardView />);
     expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(screen.getByText("Intelligence overview")).toBeInTheDocument();
+    expect(screen.getByText("Active monitors")).toBeInTheDocument();
+    expect(screen.getByText("Material signals")).toBeInTheDocument();
+    expect(screen.getByText("Runs to review")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Add competitor" })).toHaveAttribute(
+      "href",
+      "/competitors/new",
+    );
     expect(screen.getByRole("link", { name: "Acme changed pricing" })).toHaveAttribute(
       "href",
       `/findings/${finding.id}`,
@@ -255,6 +263,9 @@ describe("settings and usage", () => {
     vi.mocked(apiMutate).mockResolvedValue(settings as never);
     renderWithQuery(<SettingsView />);
     expect(await screen.findByLabelText("Display name")).toHaveValue("Founder");
+    expect(screen.getByRole("heading", { name: "Profile" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Default schedule" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Usage" })).toBeInTheDocument();
     expect(screen.getByLabelText("Timezone")).toHaveValue("Europe/Berlin");
     expect(screen.getByLabelText("Default daily run time")).toHaveValue("08:30");
     expect(screen.getByText("competitor-scout-main")).toBeInTheDocument();

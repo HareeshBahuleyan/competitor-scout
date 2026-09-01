@@ -1,11 +1,14 @@
 "use client";
 
+import { Button } from "@heroui/react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useState } from "react";
 
 import { EvidenceList } from "@/components/EvidenceList";
 import { FindingCard } from "@/components/FindingCard";
 import { RunTimeline, type RunTimelineStep } from "@/components/RunTimeline";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { apiGetClient } from "@/lib/api";
 import {
   agentTaskPageSchema,
@@ -64,6 +67,8 @@ const categories = [
 const significance = ["", "low", "medium", "high", "critical"];
 
 export function FindingsListView({ initialFilters }: { initialFilters: FindingFilters }) {
+  const activeFilters = Object.entries(initialFilters).filter(([, value]) => Boolean(value));
+  const [filtersOpen, setFiltersOpen] = useState(activeFilters.length > 0);
   const suffix = queryString(initialFilters);
   const query = useQuery({
     queryKey: ["findings", suffix],
@@ -72,90 +77,114 @@ export function FindingsListView({ initialFilters }: { initialFilters: FindingFi
 
   return (
     <section className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Findings</h1>
-        <p className="mt-1 text-slate-600">Evidence-backed competitive changes.</p>
-      </div>
-      <form
-        action="/findings"
-        className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3"
-        method="get"
-      >
-        <label className="text-sm font-medium">
-          Competitor ID
-          <input
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2"
-            defaultValue={initialFilters.competitor_id ?? ""}
-            name="competitor_id"
-            type="text"
-          />
-        </label>
-        <label className="text-sm font-medium">
-          Category
-          <select
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2"
-            defaultValue={initialFilters.category ?? ""}
-            name="category"
-          >
-            {categories.map((value) => (
-              <option key={value} value={value}>
-                {value ? value.replaceAll("_", " ") : "All categories"}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm font-medium">
-          Significance
-          <select
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2"
-            defaultValue={initialFilters.significance ?? ""}
-            name="significance"
-          >
-            {significance.map((value) => (
-              <option key={value} value={value}>
-                {value || "All levels"}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm font-medium">
-          Minimum confidence
-          <input
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2"
-            defaultValue={initialFilters.confidence_min ?? ""}
-            max="1"
-            min="0"
-            name="confidence_min"
-            step="0.05"
-            type="number"
-          />
-        </label>
-        <label className="text-sm font-medium">
-          Published from
-          <input
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2"
-            defaultValue={initialFilters.published_from ?? ""}
-            name="published_from"
-            type="date"
-          />
-        </label>
-        <label className="text-sm font-medium">
-          Published to
-          <input
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2"
-            defaultValue={initialFilters.published_to ?? ""}
-            name="published_to"
-            type="date"
-          />
-        </label>
-        <button
-          className="rounded-lg bg-slate-950 px-4 py-2 font-medium text-white sm:col-span-3 sm:justify-self-start"
-          type="submit"
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="eyebrow">Signal archive</p>
+          <h1 className="mt-1 text-4xl font-semibold">Findings</h1>
+          <p className="mt-2 text-slate-600">Evidence-backed competitive changes.</p>
+        </div>
+        <Button
+          aria-expanded={filtersOpen}
+          className="min-h-10 border border-slate-200 bg-white px-4 font-semibold text-slate-700"
+          onPress={() => setFiltersOpen((open) => !open)}
         >
-          Apply filters
-        </button>
-      </form>
-      {query.isPending ? <p role="status">Loading findings…</p> : null}
+          Filters
+          {activeFilters.length ? ` (${activeFilters.length})` : ""}
+        </Button>
+      </div>
+      {activeFilters.length ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {activeFilters.map(([key, value]) => (
+            <span
+              className="rounded-full bg-[var(--color-accent-soft)] px-2.5 py-1 text-xs font-medium text-[var(--color-accent-strong)]"
+              key={key}
+            >
+              {key.replaceAll("_", " ")}: {value}
+            </span>
+          ))}
+          <Link className="section-link ml-1" href="/findings">
+            Clear all
+          </Link>
+        </div>
+      ) : null}
+      {filtersOpen ? (
+        <form action="/findings" className="surface grid gap-4 p-4 sm:grid-cols-3" method="get">
+          <label className="text-sm font-medium">
+            Competitor ID
+            <input
+              className="mt-1 block min-h-10 w-full rounded-xl border px-3 py-2"
+              defaultValue={initialFilters.competitor_id ?? ""}
+              name="competitor_id"
+              type="text"
+            />
+          </label>
+          <label className="text-sm font-medium">
+            Category
+            <select
+              className="mt-1 block min-h-10 w-full rounded-xl border px-3 py-2"
+              defaultValue={initialFilters.category ?? ""}
+              name="category"
+            >
+              {categories.map((value) => (
+                <option key={value} value={value}>
+                  {value ? value.replaceAll("_", " ") : "All categories"}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm font-medium">
+            Significance
+            <select
+              className="mt-1 block min-h-10 w-full rounded-xl border px-3 py-2"
+              defaultValue={initialFilters.significance ?? ""}
+              name="significance"
+            >
+              {significance.map((value) => (
+                <option key={value} value={value}>
+                  {value || "All levels"}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm font-medium">
+            Minimum confidence
+            <input
+              className="mt-1 block min-h-10 w-full rounded-xl border px-3 py-2"
+              defaultValue={initialFilters.confidence_min ?? ""}
+              max="1"
+              min="0"
+              name="confidence_min"
+              step="0.05"
+              type="number"
+            />
+          </label>
+          <label className="text-sm font-medium">
+            Published from
+            <input
+              className="mt-1 block min-h-10 w-full rounded-xl border px-3 py-2"
+              defaultValue={initialFilters.published_from ?? ""}
+              name="published_from"
+              type="date"
+            />
+          </label>
+          <label className="text-sm font-medium">
+            Published to
+            <input
+              className="mt-1 block min-h-10 w-full rounded-xl border px-3 py-2"
+              defaultValue={initialFilters.published_to ?? ""}
+              name="published_to"
+              type="date"
+            />
+          </label>
+          <Button
+            className="bg-[#d34d50] px-4 font-semibold text-white sm:col-span-3 sm:justify-self-start"
+            type="submit"
+          >
+            Apply filters
+          </Button>
+        </form>
+      ) : null}
+      {query.isPending ? <LoadingState label="Loading findings…" rows={4} /> : null}
       {query.isError ? (
         <p className="text-red-700" role="alert">
           {errorText(query.error)}
@@ -187,7 +216,9 @@ export function FindingDetailView({ findingId }: { findingId: string }) {
     queryFn: () =>
       apiGetClient(`/api/v1/findings/${findingId}/evidence`, findingEvidencePageSchema),
   });
-  if (finding.isPending || evidence.isPending) return <p role="status">Loading finding…</p>;
+  if (finding.isPending || evidence.isPending) {
+    return <LoadingState label="Loading finding…" rows={4} />;
+  }
   if (finding.isError || evidence.isError)
     return (
       <p className="text-red-700" role="alert">
@@ -195,21 +226,18 @@ export function FindingDetailView({ findingId }: { findingId: string }) {
       </p>
     );
   return (
-    <article className="space-y-8">
+    <article className="max-w-3xl space-y-8">
       <header className="space-y-3">
-        <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+        <p className="eyebrow">
           {finding.data.category.replaceAll("_", " ")} · {finding.data.significance_level}
         </p>
-        <h1 className="text-3xl font-bold">{finding.data.title}</h1>
-        <p className="text-lg text-slate-700">{finding.data.summary}</p>
+        <h1 className="text-4xl font-semibold leading-tight">{finding.data.title}</h1>
+        <p className="text-lg leading-relaxed text-slate-700">{finding.data.summary}</p>
         <p className="text-sm text-slate-600">
           Confidence: {Math.round(finding.data.confidence * 100)}%
         </p>
       </header>
-      <section
-        className="rounded-xl border border-slate-200 bg-white p-5"
-        aria-labelledby="significance-heading"
-      >
+      <section className="surface p-6" aria-labelledby="significance-heading">
         <h2 className="text-xl font-semibold" id="significance-heading">
           Why it matters
         </h2>
@@ -217,7 +245,7 @@ export function FindingDetailView({ findingId }: { findingId: string }) {
         <h3 className="mt-4 font-semibold">Decision rationale</h3>
         <p className="mt-1 text-sm text-slate-600">{finding.data.decision_rationale}</p>
         <Link
-          className="mt-4 inline-block text-sm font-medium text-blue-700 hover:underline"
+          className="section-link mt-4 inline-block"
           href={`/runs/${finding.data.originating_scout_run_id}`}
         >
           Originating run
@@ -244,24 +272,23 @@ export function RunsListView() {
   return (
     <section className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Runs</h1>
-        <p className="mt-1 text-slate-600">Scout execution history and audit status.</p>
+        <p className="eyebrow">Operations</p>
+        <h1 className="mt-1 text-4xl font-semibold">Runs</h1>
+        <p className="mt-2 text-slate-600">Scout execution history and audit status.</p>
       </div>
-      {query.isPending ? <p role="status">Loading runs…</p> : null}
+      {query.isPending ? <LoadingState label="Loading runs…" rows={4} /> : null}
       {query.isError ? (
         <p className="text-red-700" role="alert">
           {errorText(query.error)}
         </p>
       ) : null}
       {query.data?.items.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-600">
-          No runs yet.
-        </p>
+        <p className="empty-state p-8 text-center">No runs yet.</p>
       ) : null}
       {query.data?.items.length ? (
         <ul className="space-y-3">
           {query.data.items.map((run) => (
-            <li className="rounded-xl border border-slate-200 bg-white p-5" key={run.id}>
+            <li className="surface surface-interactive p-5" key={run.id}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <Link className="font-semibold capitalize hover:underline" href={`/runs/${run.id}`}>
                   {runLabel(run.run_type)} run
@@ -302,7 +329,9 @@ export function RunDetailView({ runId }: { runId: string }) {
     queryKey: ["run-usage", runId],
     queryFn: () => apiGetClient(`/api/v1/runs/${runId}/usage`, runUsageSchema),
   });
-  if (run.isPending || tasks.isPending || usage.isPending) return <p role="status">Loading run…</p>;
+  if (run.isPending || tasks.isPending || usage.isPending) {
+    return <LoadingState label="Loading run…" rows={4} />;
+  }
   if (run.isError || tasks.isError || usage.isError)
     return (
       <p className="text-red-700" role="alert">
@@ -314,12 +343,12 @@ export function RunDetailView({ runId }: { runId: string }) {
     0,
   );
   return (
-    <article className="space-y-8">
+    <article className="max-w-4xl space-y-8">
       <header>
-        <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-          {run.data.status}
-        </p>
-        <h1 className="mt-2 text-3xl font-bold capitalize">{runLabel(run.data.run_type)} run</h1>
+        <p className="eyebrow">{run.data.status}</p>
+        <h1 className="mt-2 text-4xl font-semibold capitalize">
+          {runLabel(run.data.run_type)} run
+        </h1>
       </header>
       <RunTimeline
         failure_reason={run.data.failure_summary}
@@ -338,11 +367,7 @@ export function RunDetailView({ runId }: { runId: string }) {
         ) : (
           <ul className="space-y-3">
             {tasks.data.items.map((task) => (
-              <li
-                className="rounded-xl border border-slate-200 bg-white p-5"
-                id={`task-${task.id}`}
-                key={task.id}
-              >
+              <li className="surface p-5" id={`task-${task.id}`} key={task.id}>
                 <div className="flex flex-wrap justify-between gap-2">
                   <h3 className="font-semibold">{task.objective}</h3>
                   <span className="text-sm capitalize text-slate-600">{task.status}</span>

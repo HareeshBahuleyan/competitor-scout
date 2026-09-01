@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 
+import { LoadingState } from "@/components/ui/LoadingState";
 import { apiGetClient } from "@/lib/api";
 import { weeklyBriefPageSchema, weeklyBriefSchema } from "@/lib/schemas";
 
@@ -31,24 +32,23 @@ export function BriefsListView() {
   return (
     <section className="space-y-6">
       <header>
-        <h1 className="text-3xl font-bold">Weekly briefs</h1>
-        <p className="mt-1 text-slate-600">Validated summaries grounded in accepted findings.</p>
+        <p className="eyebrow">Executive intelligence</p>
+        <h1 className="mt-1 text-4xl font-semibold">Weekly briefs</h1>
+        <p className="mt-2 text-slate-600">Validated summaries grounded in accepted findings.</p>
       </header>
-      {query.isPending ? <p role="status">Loading weekly briefs…</p> : null}
+      {query.isPending ? <LoadingState label="Loading weekly briefs…" rows={4} /> : null}
       {query.isError ? (
         <p className="text-red-700" role="alert">
           {errorText(query.error)}
         </p>
       ) : null}
       {query.data?.items.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-600">
-          No weekly briefs yet.
-        </p>
+        <p className="empty-state p-8 text-center">No weekly briefs yet.</p>
       ) : null}
       {query.data?.items.length ? (
         <ul className="space-y-4">
           {query.data.items.map((brief) => (
-            <li className="rounded-xl border border-slate-200 bg-white p-5" key={brief.id}>
+            <li className="surface surface-interactive p-5" key={brief.id}>
               <p className="text-sm text-slate-500">
                 {period(brief.period_start, brief.period_end)}
               </p>
@@ -71,7 +71,7 @@ export function BriefDetailView({ briefId }: { briefId: string }) {
     queryKey: ["brief", briefId],
     queryFn: () => apiGetClient(`/api/v1/briefs/${briefId}`, weeklyBriefSchema),
   });
-  if (query.isPending) return <p role="status">Loading weekly brief…</p>;
+  if (query.isPending) return <LoadingState label="Loading weekly brief…" rows={4} />;
   if (query.isError)
     return (
       <p className="text-red-700" role="alert">
@@ -80,25 +80,25 @@ export function BriefDetailView({ briefId }: { briefId: string }) {
     );
   const brief = query.data;
   return (
-    <article className="space-y-8">
+    <article className="mx-auto max-w-3xl space-y-10">
       <header>
         <p className="text-sm font-medium text-slate-500">
           {period(brief.period_start, brief.period_end)}
         </p>
-        <h1 className="mt-2 text-3xl font-bold">{brief.title}</h1>
-        <p className="mt-3 text-lg text-slate-700">{brief.executive_summary}</p>
+        <h1 className="mt-2 text-4xl font-semibold">{brief.title}</h1>
+        <p className="mt-4 text-lg leading-8 text-slate-700">{brief.executive_summary}</p>
       </header>
       {brief.sections.length ? (
         brief.sections.map((section, index) => (
           <section
             aria-labelledby={`brief-section-${index}`}
-            className="rounded-xl border border-slate-200 bg-white p-5"
+            className="border-t border-slate-200 pt-8 first:border-t-0 first:pt-0"
             key={`${section.heading}-${index}`}
           >
             <h2 className="text-xl font-semibold" id={`brief-section-${index}`}>
               {section.heading}
             </h2>
-            <p className="mt-3 text-slate-700">{section.narrative}</p>
+            <p className="mt-3 leading-7 text-slate-700">{section.narrative}</p>
             <ol
               aria-label={`Evidence references for ${section.heading}`}
               className="mt-4 space-y-3 border-t border-slate-100 pt-4"

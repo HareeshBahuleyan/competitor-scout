@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { CompetitorForm, type CompetitorFormValues } from "@/components/CompetitorForm";
 import { FindingCard } from "@/components/FindingCard";
 import { SourceApprovalList } from "@/components/SourceApprovalList";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { apiGetClient, apiMutate } from "@/lib/api";
 import {
   competitorPageSchema,
@@ -43,31 +44,30 @@ export function CompetitorsListView() {
     <section className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Competitors</h1>
-          <p className="mt-1 text-slate-600">Companies monitored by your scout.</p>
+          <p className="eyebrow">Monitoring</p>
+          <h1 className="mt-1 text-4xl font-semibold">Competitors</h1>
+          <p className="mt-2 text-slate-600">Companies monitored by your scout.</p>
         </div>
         <Link
-          className="rounded-lg bg-slate-950 px-4 py-2 font-medium text-white"
+          className="inline-flex min-h-10 items-center rounded-xl bg-slate-950 px-4 py-2 font-semibold text-white"
           href="/competitors/new"
         >
           Add competitor
         </Link>
       </div>
-      {query.isPending ? <p role="status">Loading competitors…</p> : null}
+      {query.isPending ? <LoadingState label="Loading competitors…" rows={4} /> : null}
       {query.isError ? (
         <p className="text-red-700" role="alert">
           {errorText(query.error)}
         </p>
       ) : null}
       {query.data?.items.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-600">
-          No competitors yet.
-        </p>
+        <p className="empty-state p-8 text-center">No competitors yet.</p>
       ) : null}
       {query.data?.items.length ? (
         <ul className="grid gap-4 md:grid-cols-2">
           {query.data.items.map((item) => (
-            <li className="rounded-xl border border-slate-200 bg-white p-5" key={item.id}>
+            <li className="surface surface-interactive p-5" key={item.id}>
               <div className="flex justify-between gap-3">
                 <h2 className="font-semibold">
                   <Link className="hover:underline" href={`/competitors/${item.id}`}>
@@ -182,7 +182,7 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
     }
   }
 
-  if (me.isPending) return <p role="status">Loading account…</p>;
+  if (me.isPending) return <LoadingState label="Loading account…" rows={3} />;
   if (me.isError)
     return (
       <p className="text-red-700" role="alert">
@@ -192,11 +192,12 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
   return (
     <section className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold">Add competitor</h1>
-        <p className="mt-1 text-slate-600">Create a profile, then review its discovered sources.</p>
+        <p className="eyebrow">New monitor</p>
+        <h1 className="mt-1 text-4xl font-semibold">Add competitor</h1>
+        <p className="mt-2 text-slate-600">Create a profile, then review its discovered sources.</p>
       </div>
       {!created ? (
-        <div className="max-w-2xl rounded-xl border border-slate-200 bg-white p-6">
+        <div className="surface max-w-2xl p-6">
           <CompetitorForm
             isSubmitting={create.isPending}
             onSubmit={(values) => create.mutateAsync(values).then(() => undefined)}
@@ -209,7 +210,7 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
         </p>
       ) : null}
       {discovery.isPending || (runId && run.isPending) ? (
-        <p role="status">Discovering sources…</p>
+        <LoadingState label="Discovering sources…" rows={2} />
       ) : null}
       {discovery.isError ? (
         <div className="space-y-3" role="alert">
@@ -241,7 +242,7 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
         </p>
       ) : null}
       {canLoadSources && sources.isPending ? (
-        <p role="status">Loading discovered sources…</p>
+        <LoadingState label="Loading discovered sources…" rows={2} />
       ) : null}
       {sources.isError ? (
         <p className="text-red-700" role="alert">
@@ -404,7 +405,7 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
     findings.isPending ||
     recentRuns.isPending
   )
-    return <p role="status">Loading competitor…</p>;
+    return <LoadingState label="Loading competitor…" rows={5} />;
   if (me.isError || competitor.isError || sources.isError || findings.isError || recentRuns.isError)
     return (
       <p className="text-red-700" role="alert">
@@ -415,16 +416,14 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
     );
   const hasApproved = sources.data.items.some((item) => item.approval_status === "approved");
   return (
-    <article className="space-y-8">
+    <article className="space-y-10">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-            {competitor.data.status}
-          </p>
-          <h1 className="mt-1 text-3xl font-bold">{competitor.data.name}</h1>
+          <p className="eyebrow">{competitor.data.status}</p>
+          <h1 className="mt-1 text-4xl font-semibold">{competitor.data.name}</h1>
           <p className="mt-2 text-slate-600">{competitor.data.description}</p>
           <a
-            className="mt-2 inline-block text-sm text-blue-700 hover:underline"
+            className="section-link mt-2 inline-block"
             href={`https://${competitor.data.primary_domain}`}
             rel="noopener noreferrer"
             target="_blank"
@@ -484,17 +483,14 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
           <h2 className="text-xl font-semibold" id="recent-findings-heading">
             Recent findings
           </h2>
-          <Link
-            className="text-sm font-medium text-blue-700 hover:underline"
-            href={`/findings?competitor_id=${competitorId}`}
-          >
+          <Link className="section-link" href={`/findings?competitor_id=${competitorId}`}>
             View all findings
           </Link>
         </div>
         <form
           action="/findings"
           aria-label="Filter competitor findings"
-          className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-4"
+          className="surface grid gap-3 p-4 sm:grid-cols-4"
           method="get"
         >
           <input name="competitor_id" type="hidden" value={competitorId} />
@@ -547,17 +543,14 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
           <h2 className="text-xl font-semibold" id="recent-runs-heading">
             Recent runs
           </h2>
-          <Link
-            className="text-sm font-medium text-blue-700 hover:underline"
-            href={`/runs?competitor_id=${competitorId}`}
-          >
+          <Link className="section-link" href={`/runs?competitor_id=${competitorId}`}>
             View all runs
           </Link>
         </div>
         {recentRuns.data.items.length ? (
           <ul className="space-y-2">
             {recentRuns.data.items.map((run) => (
-              <li className="rounded-xl border border-slate-200 bg-white p-4" key={run.id}>
+              <li className="surface surface-interactive p-4" key={run.id}>
                 <Link className="font-medium capitalize hover:underline" href={`/runs/${run.id}`}>
                   {run.run_type.replaceAll("_", " ")}
                 </Link>

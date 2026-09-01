@@ -73,7 +73,17 @@ export function RunTimeline({
         <h2 className="text-xl font-semibold" id="run-timeline-heading">
           Run timeline
         </h2>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium">
+        <span
+          className={`rounded-full px-3 py-1 text-sm font-medium ${
+            status === "failed"
+              ? "bg-red-50 text-red-700"
+              : status === "partial"
+                ? "bg-amber-50 text-amber-800"
+                : status === "completed"
+                  ? "bg-emerald-50 text-emerald-700"
+                  : "bg-slate-100 text-slate-700"
+          }`}
+        >
           {humanize(status)}
         </span>
       </div>
@@ -83,7 +93,7 @@ export function RunTimeline({
           <li className="relative" key={`${step.state}-${step.occurred_at}-${index}`}>
             <span
               aria-hidden="true"
-              className="absolute -left-[1.65rem] top-1.5 size-3 rounded-full bg-slate-950"
+              className="absolute -left-[1.65rem] top-1.5 size-3 rounded-full bg-[var(--color-accent)]"
             />
             <p className="font-medium text-slate-950">{humanize(step.state)}</p>
             <time className="text-sm text-slate-500" dateTime={step.occurred_at}>
@@ -111,9 +121,9 @@ export function RunTimeline({
         </div>
       ) : null}
 
-      <div>
-        <h3 className="font-semibold">Usage</h3>
-        <div className="mt-2 grid gap-2 text-sm text-slate-700 sm:grid-cols-2 lg:grid-cols-3">
+      <details className="surface p-4">
+        <summary className="cursor-pointer font-semibold text-slate-700">Usage details</summary>
+        <div className="mt-4 grid gap-2 text-sm text-slate-700 sm:grid-cols-2 lg:grid-cols-3">
           <p>
             Retries<span>: {retryCount.toLocaleString("en-US")}</span>
           </p>
@@ -133,7 +143,7 @@ export function RunTimeline({
             Settled cost<span>: {knownCost(usage?.settled_cost_usd)}</span>
           </p>
         </div>
-      </div>
+      </details>
     </section>
   );
 }

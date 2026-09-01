@@ -52,7 +52,7 @@ export function EvidenceList({ evidence }: EvidenceListProps) {
           const sourceUrl = safeHttpsUrl(item.source_url);
 
           return (
-            <li className="rounded-xl border border-slate-200 bg-white p-5" key={item.id}>
+            <li className="surface p-5" key={item.id}>
               <article>
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Citation {item.citation_order}
@@ -71,7 +71,7 @@ export function EvidenceList({ evidence }: EvidenceListProps) {
                     item.source_title
                   )}
                 </h3>
-                <blockquote className="mt-4 border-l-4 border-slate-300 pl-4 text-sm leading-6 text-slate-700">
+                <blockquote className="mt-4 rounded-r-xl border-l-4 border-[var(--color-accent)] bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">
                   {item.quoted_text}
                 </blockquote>
                 <dl className="mt-4 grid gap-2 text-xs text-slate-500 sm:grid-cols-2">

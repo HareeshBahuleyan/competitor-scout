@@ -83,7 +83,7 @@ export function CompetitorForm({
         <input
           aria-describedby={errors.name ? "competitor-name-error" : undefined}
           aria-invalid={Boolean(errors.name)}
-          className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 disabled:bg-slate-100"
+          className="mt-2 min-h-10 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 disabled:bg-slate-100"
           disabled={isSubmitting}
           id="competitor-name"
           maxLength={200}
@@ -107,7 +107,7 @@ export function CompetitorForm({
           aria-describedby={errors.primary_domain ? "primary-domain-error" : undefined}
           aria-invalid={Boolean(errors.primary_domain)}
           autoCapitalize="none"
-          className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 disabled:bg-slate-100"
+          className="mt-2 min-h-10 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 disabled:bg-slate-100"
           disabled={isSubmitting}
           id="primary-domain"
           inputMode="url"
@@ -131,7 +131,7 @@ export function CompetitorForm({
           Description
         </label>
         <textarea
-          className="mt-2 min-h-28 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 disabled:bg-slate-100"
+          className="mt-2 min-h-28 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 disabled:bg-slate-100"
           disabled={isSubmitting}
           id="description"
           maxLength={2000}
@@ -146,7 +146,7 @@ export function CompetitorForm({
           Daily run time
         </label>
         <input
-          className="mt-2 rounded-lg border border-slate-300 bg-white px-3 py-2 disabled:bg-slate-100"
+          className="mt-2 min-h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 disabled:bg-slate-100"
           disabled={isSubmitting}
           id="daily-run-time"
           name="daily_run_time_local"
@@ -158,7 +158,7 @@ export function CompetitorForm({
       </div>
 
       <button
-        className="rounded-lg bg-slate-950 px-4 py-2.5 font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+        className="min-h-10 rounded-xl bg-slate-950 px-4 py-2.5 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
         disabled={isSubmitting}
         type="submit"
       >

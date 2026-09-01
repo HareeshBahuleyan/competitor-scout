@@ -126,6 +126,7 @@ test("explains a partial run and its retries", async ({ page }) => {
   await page.goto(`/runs/${runId}`);
 
   await expect(page.getByText("Pricing source timed out after retry")).toBeVisible();
+  await page.getByText("Usage details", { exact: true }).click();
   await expect(page.getByText("Retries: 1")).toBeVisible();
   await expect(page.getByText("Tool calls: Unknown")).toBeVisible();
   await expect(page.getByText("Settled cost: Unknown")).toBeVisible();
