@@ -13,12 +13,13 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from urllib.parse import urlsplit
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from competitor_scout.agents.contracts import FindingCategory, SignificanceLevel
 from competitor_scout.db import SessionFactory
+from competitor_scout.models.auth import User
 from competitor_scout.models.intelligence import (
     AgentTask,
     AgentTaskRole,
@@ -33,6 +34,7 @@ from competitor_scout.models.intelligence import (
     ScoutRunStatus,
 )
 from competitor_scout.schemas.findings import EvidencePublication, FindingPublication
+from competitor_scout.services.notifications import enqueue_email_notification, finding_email_key
 
 
 class PublicationValidationError(ValueError):
@@ -166,9 +168,11 @@ class FindingPublicationService:
         session_factory: SessionFactory,
         *,
         minimum_confidence: Decimal = Decimal("0.70"),
+        email_delivery_available: bool = False,
     ) -> None:
         self._session_factory = session_factory
         self._minimum_confidence = minimum_confidence
+        self._email_delivery_available = email_delivery_available
 
     async def publish(
         self,
@@ -267,6 +271,7 @@ class FindingPublicationService:
                 session,
                 user_id=user_id,
                 competitor_id=competitor_id,
+                competitor_name=competitor.name,
                 scout_run_id=scout_run_id,
                 finding=finding,
                 source_details=cited_source_details,
@@ -279,6 +284,7 @@ class FindingPublicationService:
         *,
         user_id: uuid.UUID,
         competitor_id: uuid.UUID,
+        competitor_name: str,
         scout_run_id: uuid.UUID,
         finding: FindingPublication,
         source_details: list[_EvidenceDetails],
@@ -367,16 +373,18 @@ class FindingPublicationService:
                 last_seen_at=published_at,
                 published_at=published_at,
             )
-            .on_conflict_do_update(
-                index_elements=[Finding.duplicate_key],
-                set_={
-                    "last_seen_at": func.greatest(Finding.last_seen_at, published_at),
-                    "updated_at": func.now(),
-                },
-            )
+            .on_conflict_do_nothing(index_elements=[Finding.duplicate_key])
             .returning(Finding)
         )
-        record = (await session.scalars(finding_statement)).one()
+        record = (await session.scalars(finding_statement)).one_or_none()
+        inserted = record is not None
+        if record is None:
+            record = await session.scalar(
+                select(Finding).where(Finding.duplicate_key == duplicate_key)
+            )
+            if record is None:
+                raise RuntimeError("finding deduplication did not resolve a row")
+            record.last_seen_at = max(record.last_seen_at, published_at)
         if record.user_id != user_id or record.competitor_id != competitor_id:
             raise RuntimeError("finding duplicate key resolved outside publication scope")
 
@@ -414,6 +422,27 @@ class FindingPublicationService:
             next_order += 1
             has_primary = has_primary or is_primary
         await session.refresh(record)
+        if (
+            inserted
+            and self._email_delivery_available
+            and finding.significance_level in {SignificanceLevel.HIGH, SignificanceLevel.CRITICAL}
+        ):
+            user = await session.get(User, user_id)
+            if user is not None and user.email_findings_enabled:
+                await enqueue_email_notification(
+                    session,
+                    user_id=user_id,
+                    notification_type="finding_email",
+                    deduplication_key=finding_email_key(record.id),
+                    payload={
+                        "finding_id": str(record.id),
+                        "competitor_name": competitor_name,
+                        "title": record.title,
+                        "summary": record.summary,
+                        "significance_level": record.significance_level.value,
+                    },
+                    available_at=published_at,
+                )
         return record
 
 

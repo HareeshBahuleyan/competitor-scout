@@ -45,6 +45,9 @@ const settings = {
   display_name: "Owner",
   timezone: "Europe/Berlin",
   default_daily_time: "06:45:00",
+  email_findings_enabled: false,
+  email_weekly_brief_enabled: false,
+  email_delivery_available: false,
 };
 const run = (status: string, failure_summary: string | null = null) => ({
   id: "44444444-4444-4444-8444-444444444444",

@@ -48,6 +48,26 @@ def test_operational_defaults_are_bounded() -> None:
     assert settings.max_synthesis_repairs == 1
     assert settings.max_child_retries == 1
     assert settings.max_otari_concurrency == 8
+    assert settings.email_delivery_enabled is False
+    assert settings.resend_api_key is None
+    assert settings.notification_email_from is None
+
+
+def test_email_delivery_requires_backend_transport_configuration() -> None:
+    with pytest.raises(ValidationError, match="RESEND_API_KEY"):
+        Settings(**(valid_values() | {"email_delivery_enabled": True}))
+
+    settings = Settings(
+        **(
+            valid_values()
+            | {
+                "email_delivery_enabled": True,
+                "resend_api_key": "resend-key",
+                "notification_email_from": "Scout <scout@example.com>",
+            }
+        )
+    )
+    assert settings.email_delivery_enabled is True
 
 
 def test_otari_models_use_suffix_free_environment_names(monkeypatch: pytest.MonkeyPatch) -> None:

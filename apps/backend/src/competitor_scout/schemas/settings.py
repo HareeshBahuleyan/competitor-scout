@@ -4,13 +4,16 @@ from datetime import date, time
 from decimal import Decimal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 
 
 class UserSettingsRead(BaseModel):
     display_name: str
     timezone: str
     default_daily_time: time
+    email_findings_enabled: bool
+    email_weekly_brief_enabled: bool
+    email_delivery_available: bool
 
 
 class UserSettingsUpdate(BaseModel):
@@ -19,6 +22,8 @@ class UserSettingsUpdate(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=200)
     timezone: str | None = Field(default=None, min_length=1, max_length=64)
     default_daily_time: time | None = None
+    email_findings_enabled: StrictBool | None = None
+    email_weekly_brief_enabled: StrictBool | None = None
 
     @field_validator("display_name")
     @classmethod
@@ -48,6 +53,13 @@ class UserSettingsUpdate(BaseModel):
             raise ValueError("default_daily_time must not be null")
         if value.tzinfo is not None:
             raise ValueError("default_daily_time must be a local time")
+        return value
+
+    @field_validator("email_findings_enabled", "email_weekly_brief_enabled")
+    @classmethod
+    def email_preferences_must_not_be_null(cls, value: bool | None) -> bool:
+        if value is None:
+            raise ValueError("email preferences must not be null")
         return value
 
 

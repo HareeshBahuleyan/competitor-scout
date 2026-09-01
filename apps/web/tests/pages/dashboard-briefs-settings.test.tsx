@@ -84,6 +84,9 @@ const settings = {
   display_name: "Founder",
   timezone: "Europe/Berlin",
   default_daily_time: "08:30:00",
+  email_findings_enabled: false,
+  email_weekly_brief_enabled: false,
+  email_delivery_available: true,
 };
 const usage = {
   items: [
@@ -287,9 +290,12 @@ describe("settings and usage", () => {
     expect(await screen.findByLabelText("Display name")).toHaveValue("Founder");
     expect(screen.getByRole("heading", { name: "Profile" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Default schedule" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Notifications" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Usage" })).toBeInTheDocument();
     expect(screen.getByLabelText("Timezone")).toHaveValue("Europe/Berlin");
     expect(screen.getByLabelText("Default daily run time")).toHaveValue("08:30");
+    expect(screen.getByLabelText("Important finding emails")).not.toBeChecked();
+    expect(screen.getByLabelText("Weekly brief emails")).not.toBeChecked();
     expect(screen.getByText("competitor-scout-main")).toBeInTheDocument();
     expect(screen.getAllByText("Unknown")).toHaveLength(2);
     expect(screen.queryByLabelText(/model|budget|tool/i)).not.toBeInTheDocument();
@@ -299,12 +305,19 @@ describe("settings and usage", () => {
     fireEvent.change(screen.getByLabelText("Default daily run time"), {
       target: { value: "09:15" },
     });
+    fireEvent.click(screen.getByLabelText("Important finding emails"));
     fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
     await waitFor(() =>
       expect(apiMutate).toHaveBeenCalledWith(
         "/api/v1/settings",
         {
-          body: { display_name: "New Founder", timezone: "UTC", default_daily_time: "09:15:00" },
+          body: {
+            display_name: "New Founder",
+            timezone: "UTC",
+            default_daily_time: "09:15:00",
+            email_findings_enabled: true,
+            email_weekly_brief_enabled: false,
+          },
           csrfToken: "csrf-token",
           method: "PATCH",
         },
@@ -312,6 +325,23 @@ describe("settings and usage", () => {
       ),
     );
     expect(await screen.findByRole("status")).toHaveTextContent("Settings saved");
+  });
+
+  it("explains and disables email preferences when delivery is unavailable", async () => {
+    vi.mocked(apiGetClient).mockImplementation(async (path) => {
+      if (path === "/api/v1/me") return me as never;
+      if (path === "/api/v1/settings")
+        return { ...settings, email_delivery_available: false } as never;
+      if (path === "/api/v1/usage/summary") return usage as never;
+      throw new Error(`Unexpected path ${path}`);
+    });
+    renderWithQuery(<SettingsView />);
+
+    expect(
+      await screen.findByText("Email delivery is not available for this workspace yet."),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Important finding emails")).toBeDisabled();
+    expect(screen.getByLabelText("Weekly brief emails")).toBeDisabled();
   });
 
   it("rejects invalid IANA timezones and disables submission while pending", async () => {

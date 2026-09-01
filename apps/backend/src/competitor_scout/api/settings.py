@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from sqlalchemy import case, func, select
 
 from competitor_scout.api.deps import CsrfRequired, CurrentUser, DbSession
@@ -16,22 +16,28 @@ from competitor_scout.schemas.settings import (
 router = APIRouter(prefix="/api/v1", tags=["settings"])
 
 
-def settings_response(user: User) -> UserSettingsRead:
+def settings_response(user: User, *, email_delivery_available: bool) -> UserSettingsRead:
     return UserSettingsRead(
         display_name=user.display_name,
         timezone=user.timezone,
         default_daily_time=user.default_daily_run_time_local,
+        email_findings_enabled=user.email_findings_enabled,
+        email_weekly_brief_enabled=user.email_weekly_brief_enabled,
+        email_delivery_available=email_delivery_available,
     )
 
 
 @router.get("/settings", response_model=UserSettingsRead)
-async def get_settings_route(user: CurrentUser) -> UserSettingsRead:
-    return settings_response(user)
+async def get_settings_route(request: Request, user: CurrentUser) -> UserSettingsRead:
+    return settings_response(
+        user, email_delivery_available=request.app.state.settings.email_delivery_enabled
+    )
 
 
 @router.patch("/settings", response_model=UserSettingsRead)
 async def update_settings_route(
     payload: UserSettingsUpdate,
+    request: Request,
     db: DbSession,
     user: CurrentUser,
     _csrf: CsrfRequired,
@@ -44,7 +50,9 @@ async def update_settings_route(
         user.default_daily_run_time_local = default_daily_time
     await db.flush()
     await db.refresh(user)
-    return settings_response(user)
+    return settings_response(
+        user, email_delivery_available=request.app.state.settings.email_delivery_enabled
+    )
 
 
 @router.get("/usage/summary", response_model=UsageSummary)

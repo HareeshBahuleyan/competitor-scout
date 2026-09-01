@@ -11,7 +11,7 @@ from decimal import Decimal
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from competitor_scout.agents.contracts import FindingCategory, SignificanceLevel, SourceType
@@ -33,6 +33,8 @@ from competitor_scout.models.intelligence import (
     ScoutRun,
     ScoutRunStatus,
 )
+from competitor_scout.models.jobs import Job
+from competitor_scout.models.notifications import NotificationOutbox
 from competitor_scout.schemas.findings import EvidencePublication, FindingPublication
 from competitor_scout.services.findings import (
     FindingPublicationService,
@@ -159,13 +161,14 @@ def finding(
     evidence_indexes: list[int] | None = None,
     primary_evidence_index: int = 0,
     confidence: Decimal = Decimal("0.9500"),
+    significance_level: SignificanceLevel = SignificanceLevel.HIGH,
 ) -> FindingPublication:
     return FindingPublication(
         category=FindingCategory.PRICING,
         title="Pro price increased",
         summary="The monthly Pro price is now $99.",
         significance_explanation="This changes the competitive price comparison.",
-        significance_level=SignificanceLevel.HIGH,
+        significance_level=significance_level,
         confidence=confidence,
         normalized_claim=normalized_claim,
         material_change=True,
@@ -173,6 +176,62 @@ def finding(
         primary_evidence_index=primary_evidence_index,
         decision_rationale="The cited first-party page directly supports the claim.",
     )
+
+
+async def test_new_high_finding_enqueues_one_opt_in_email_without_evidence_payload(
+    publication_store,
+) -> None:
+    context = await seed_context(publication_store, "notification")
+    async with publication_store.begin() as session:
+        user = await session.get(User, context.user_id)
+        assert user is not None
+        user.email_findings_enabled = True
+    service = FindingPublicationService(publication_store, email_delivery_available=True)
+    publication = finding()
+    source = evidence(context)
+
+    first = await service.publish(
+        user_id=context.user_id,
+        competitor_id=context.competitor_id,
+        scout_run_id=context.scout_run_id,
+        finding=publication,
+        evidence=[source],
+        published_at=NOW,
+    )
+    await service.publish(
+        user_id=context.user_id,
+        competitor_id=context.competitor_id,
+        scout_run_id=context.scout_run_id,
+        finding=publication,
+        evidence=[source],
+        published_at=NOW + timedelta(minutes=5),
+    )
+
+    async with publication_store() as session:
+        rows = list(
+            (
+                await session.scalars(
+                    select(NotificationOutbox).where(NotificationOutbox.user_id == context.user_id)
+                )
+            ).all()
+        )
+        assert len(rows) == 1
+        assert rows[0].deduplication_key == f"email:finding:{first.id}"
+        assert rows[0].payload["title"] == publication.title
+        assert "quoted_text" not in rows[0].payload
+        assert (
+            await session.scalar(
+                select(func.count(Job.id)).where(
+                    Job.deduplication_key.like(f"email_notification:{rows[0].id}:%")
+                )
+            )
+            == 1
+        )
+    async with publication_store.begin() as session:
+        await session.execute(
+            delete(Job).where(Job.deduplication_key.like(f"email_notification:{rows[0].id}:%"))
+        )
+        await session.execute(delete(User).where(User.id == context.user_id))
 
 
 async def test_publication_rejects_bad_citation_without_orphan_rows(publication_store) -> None:
