@@ -60,6 +60,7 @@ async def run_case(
     synthesis_deadline: int,
 ) -> dict[str, Any]:
     case_id = str(case["id"])
+    session_label = f"live-eval:{case_id}"
     child_result, child_metadata = await client.structured_completion(
         model=child_model,
         messages=child_messages(
@@ -71,7 +72,7 @@ async def run_case(
             }
         ),
         output_type=ChildTaskResult,
-        session_label=f"live-eval:{case_id}:child",
+        session_label=session_label,
         max_completion_tokens=child_tokens,
         deadline_seconds=child_deadline,
     )
@@ -79,7 +80,7 @@ async def run_case(
         model=main_model,
         messages=synthesis_messages(child_result),
         output_type=SynthesisResult,
-        session_label=f"live-eval:{case_id}:main",
+        session_label=session_label,
         max_completion_tokens=main_tokens,
         deadline_seconds=synthesis_deadline,
     )

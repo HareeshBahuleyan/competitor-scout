@@ -199,6 +199,7 @@ async def test_discovery_uses_exact_hosted_tool_contract_and_filters_sources() -
             },
         ]
     }
+    run_id = uuid.uuid4()
 
     async def transport_handler(request: httpx.Request) -> httpx.Response:
         body = json.loads((await request.aread()).decode())
@@ -206,7 +207,7 @@ async def test_discovery_uses_exact_hosted_tool_contract_and_filters_sources() -
         assert body["tools"] == [{"type": "otari_web_search"}]
         assert body["parallel_tool_calls"] is False
         assert body["max_tool_iterations"] == 3
-        assert body["session_label"].startswith("source-discovery:")
+        assert body["session_label"] == f"scout-run:{run_id}"
         return httpx.Response(
             200,
             json={
@@ -225,7 +226,7 @@ async def test_discovery_uses_exact_hosted_tool_contract_and_filters_sources() -
             client=client,
             settings=discovery_settings(),
             url_validator=validator,
-        ).discover(domain="acme.example", run_id=uuid.uuid4())
+        ).discover(domain="acme.example", run_id=run_id)
 
     assert [str(item.url) for item in outcome.sources] == ["https://acme.example/pricing"]
     assert outcome.rejected_count == 3

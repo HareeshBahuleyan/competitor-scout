@@ -30,6 +30,7 @@ from competitor_scout.agents.prompts import (
     planning_messages,
     synthesis_messages,
 )
+from competitor_scout.agents.session_labels import scout_run_session_label
 from competitor_scout.agents.validation import NormalizedEvidence, validate_evidence_scope
 from competitor_scout.config import Settings
 from competitor_scout.db import SessionFactory
@@ -539,7 +540,7 @@ class ScoutOrchestrator:
                     model=self._settings.otari_main_model,
                     messages=messages,
                     output_type=ScoutPlan,
-                    session_label=f"daily:{context.run_id}:planning",
+                    session_label=scout_run_session_label(context.run_id),
                     max_completion_tokens=self._settings.main_output_token_limit,
                     deadline_seconds=self._settings.planning_deadline_seconds,
                     enable_web_search=False,
@@ -675,7 +676,7 @@ class ScoutOrchestrator:
                         model=self._settings.otari_child_model,
                         messages=messages,
                         output_type=ChildTaskResult,
-                        session_label=f"daily:{context.run_id}:child:{task_id}",
+                        session_label=scout_run_session_label(context.run_id),
                         max_completion_tokens=self._settings.child_output_token_limit,
                         deadline_seconds=self._settings.child_deadline_seconds,
                         enable_web_search=True,
@@ -925,7 +926,7 @@ class ScoutOrchestrator:
                     model=self._settings.otari_main_model,
                     messages=messages,
                     output_type=SynthesisResult,
-                    session_label=f"daily:{context.run_id}:synthesis",
+                    session_label=scout_run_session_label(context.run_id),
                     max_completion_tokens=self._settings.main_output_token_limit,
                     deadline_seconds=self._settings.synthesis_deadline_seconds,
                     enable_web_search=False,
@@ -1318,7 +1319,7 @@ class SourceDiscoveryService:
                 {"role": "user", "content": payload},
             ],
             output_type=SourceDiscoveryResult,
-            session_label=f"source-discovery:{run_id}",
+            session_label=scout_run_session_label(run_id),
             max_completion_tokens=self._settings.main_output_token_limit,
             deadline_seconds=self._settings.planning_deadline_seconds,
             enable_web_search=True,

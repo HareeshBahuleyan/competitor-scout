@@ -328,6 +328,7 @@ async def test_grounded_brief_uses_only_local_period_findings_and_is_idempotent(
     assert len(client.calls) == 1
     call = client.calls[0]
     assert call["model"] == settings().otari_main_model
+    assert call["session_label"] == f"scout-run:{seeded.run_id}"
     assert call["enable_web_search"] is False
     assert call["max_tool_iterations"] == 1
     input_payload = json.loads(call["messages"][1]["content"])

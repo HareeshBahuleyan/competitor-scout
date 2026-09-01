@@ -14,6 +14,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import selectinload
 
 from competitor_scout.agents.client import OtariMetadata
+from competitor_scout.agents.session_labels import scout_run_session_label
 from competitor_scout.config import Settings
 from competitor_scout.db import SessionFactory
 from competitor_scout.models.auth import User
@@ -111,7 +112,7 @@ class WeeklyBriefHandler:
                 model=self._settings.otari_main_model,
                 messages=messages,
                 output_type=WeeklyBriefResult,
-                session_label=f"weekly:{run_id}",
+                session_label=scout_run_session_label(run_id),
                 max_completion_tokens=self._settings.main_output_token_limit,
                 deadline_seconds=self._settings.synthesis_deadline_seconds,
                 enable_web_search=False,

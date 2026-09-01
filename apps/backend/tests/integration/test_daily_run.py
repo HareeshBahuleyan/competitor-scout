@@ -471,6 +471,7 @@ async def test_daily_run_happy_path_is_bounded_auditable_and_publishes(daily_sto
     assert synthesizer.attempt_count == 2
     assert evidence_count == 4 and finding_count == 1 and usage_count == 6
     assert fake.maximum_children == 4
+    assert {call["session_label"] for call in fake.calls} == {f"scout-run:{run_id}"}
     planning_call = next(call for call in fake.calls if call["output_type"] is ScoutPlan)
     synthesis_call = next(call for call in fake.calls if call["output_type"] is SynthesisResult)
     assert planning_call["model"] == "competitor-scout-main"
