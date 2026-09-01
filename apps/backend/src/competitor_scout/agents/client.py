@@ -222,12 +222,28 @@ class OtariClient:
             status,
             ("otari_upstream_error", status >= 500),
         )
+        if status == 422 and OtariClient._is_tool_iteration_limit(response):
+            code = "otari_tool_iteration_limit"
         return OtariError(
             code,
             retryable=retryable,
             status_code=status,
             retry_after=response.headers.get("Retry-After"),
         )
+
+    @staticmethod
+    def _is_tool_iteration_limit(response: httpx.Response) -> bool:
+        try:
+            document = response.json()
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return False
+        if not isinstance(document, dict):
+            return False
+        detail = document.get("detail")
+        if not isinstance(detail, str):
+            return False
+        prefix = "Exceeded max_tool_iterations="
+        return detail.startswith(prefix) and detail.removeprefix(prefix).isdigit()
 
     @staticmethod
     def _response_document(response: httpx.Response) -> dict[str, Any]:

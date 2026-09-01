@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     max_child_tasks_per_run: int = Field(default=8, ge=1, le=20)
     max_concurrent_child_tasks: int = Field(default=4, ge=1, le=10)
     max_child_search_calls: int = Field(default=2, ge=1, le=10)
+    max_source_discovery_search_calls: int = Field(default=5, ge=1, le=24)
     main_input_token_limit: int = Field(default=32_000, ge=1, le=1_000_000)
     main_output_token_limit: int = Field(default=4_000, ge=1, le=100_000)
     child_input_token_limit: int = Field(default=16_000, ge=1, le=1_000_000)

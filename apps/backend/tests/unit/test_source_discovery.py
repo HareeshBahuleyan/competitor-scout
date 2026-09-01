@@ -206,7 +206,8 @@ async def test_discovery_uses_exact_hosted_tool_contract_and_filters_sources() -
         assert body["model"] == "competitor-scout-main"
         assert body["tools"] == [{"type": "otari_web_search"}]
         assert body["parallel_tool_calls"] is False
-        assert body["max_tool_iterations"] == 3
+        assert body["max_tool_iterations"] == 6
+        assert "Make no more than 5 web search calls." in body["messages"][0]["content"]
         assert body["session_label"] == f"scout-run:{run_id}"
         return httpx.Response(
             200,

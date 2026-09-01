@@ -1301,14 +1301,15 @@ class SourceDiscoveryService:
             sort_keys=True,
             separators=(",", ":"),
         )
+        search_limit = self._settings.max_source_discovery_search_calls
         system = "\n\n".join(
             (
                 UNTRUSTED_SOURCE_POLICY,
                 f"Prompt version: {PROMPT_VERSION}.",
                 (
                     "Use only the otari_web_search tool. Do not use or request any "
-                    "other tool. Stay within the competitor domain and return "
-                    "SourceDiscoveryResult only."
+                    f"other tool. Make no more than {search_limit} web search calls. "
+                    "Stay within the competitor domain and return SourceDiscoveryResult only."
                 ),
             )
         )
@@ -1323,7 +1324,7 @@ class SourceDiscoveryService:
             max_completion_tokens=self._settings.main_output_token_limit,
             deadline_seconds=self._settings.planning_deadline_seconds,
             enable_web_search=True,
-            max_tool_iterations=self._settings.max_child_search_calls + 1,
+            max_tool_iterations=search_limit + 1,
         )
 
         accepted: list[DiscoveredSource] = []

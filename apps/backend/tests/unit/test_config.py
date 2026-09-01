@@ -36,6 +36,7 @@ def test_operational_defaults_are_bounded() -> None:
     assert settings.max_child_tasks_per_run == 8
     assert settings.max_concurrent_child_tasks == 4
     assert settings.max_child_search_calls == 2
+    assert settings.max_source_discovery_search_calls == 5
     assert settings.main_input_token_limit == 32_000
     assert settings.main_output_token_limit == 4_000
     assert settings.child_input_token_limit == 16_000
@@ -72,9 +73,17 @@ def test_active_user_limit_is_bounded() -> None:
         Settings(**(valid_values() | {"max_active_users": 0}))
 
 
-def test_search_budget_cannot_disable_required_hosted_retrieval() -> None:
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("max_child_search_calls", 0),
+        ("max_source_discovery_search_calls", 0),
+        ("max_source_discovery_search_calls", 25),
+    ],
+)
+def test_search_budgets_are_bounded(field: str, value: int) -> None:
     with pytest.raises(ValidationError):
-        Settings(**(valid_values() | {"max_child_search_calls": 0}))
+        Settings(**(valid_values() | {field: value}))
 
 
 def test_otari_ai_token_is_required() -> None:

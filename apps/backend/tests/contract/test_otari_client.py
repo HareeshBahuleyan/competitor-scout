@@ -152,6 +152,30 @@ async def test_http_errors_are_safely_mapped(
     assert "hosted-ai-token" not in str(raised.value)
 
 
+async def test_tool_iteration_limit_is_classified_without_exposing_response_body() -> None:
+    async def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            422,
+            json={"detail": "Exceeded max_tool_iterations=6", "response_body": "secret"},
+        )
+
+    async with OtariClient(settings(), transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(OtariError) as raised:
+            await client.structured_completion(
+                model="competitor-scout-main",
+                messages=[{"role": "user", "content": "Discover."}],
+                output_type=ScoutPlan,
+                session_label="run:tool-limit",
+                max_completion_tokens=100,
+                deadline_seconds=5,
+            )
+
+    assert raised.value.code == "otari_tool_iteration_limit"
+    assert raised.value.retryable is False
+    assert "max_tool_iterations" not in str(raised.value)
+    assert "secret" not in str(raised.value)
+
+
 @pytest.mark.parametrize(
     ("exception", "code"),
     [
