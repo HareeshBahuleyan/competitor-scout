@@ -13,6 +13,27 @@ from competitor_scout.config import Settings
 T = TypeVar("T", bound=BaseModel)
 
 
+def hosted_json_schema(output_type: type[BaseModel]) -> dict[str, Any]:
+    schema = output_type.model_json_schema()
+    unsupported_keywords = {"default", "format"}
+
+    def enforce_hosted_subset(value: object) -> None:
+        if isinstance(value, dict):
+            for keyword in unsupported_keywords:
+                value.pop(keyword, None)
+            properties = value.get("properties")
+            if isinstance(properties, dict):
+                value["required"] = list(properties)
+            for child in value.values():
+                enforce_hosted_subset(child)
+        elif isinstance(value, list):
+            for child in value:
+                enforce_hosted_subset(child)
+
+    enforce_hosted_subset(schema)
+    return schema
+
+
 @dataclass(frozen=True)
 class OtariUsage:
     input_tokens: int
@@ -111,18 +132,18 @@ class OtariClient:
             "messages": messages,
             "session_label": session_label,
             "max_completion_tokens": max_completion_tokens,
-            "parallel_tool_calls": False,
-            "max_tool_iterations": effective_tool_iterations,
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {
                     "name": output_type.__name__,
                     "strict": True,
-                    "schema": output_type.model_json_schema(),
+                    "schema": hosted_json_schema(output_type),
                 },
             },
         }
         if enable_web_search:
+            body["parallel_tool_calls"] = False
+            body["max_tool_iterations"] = effective_tool_iterations
             body["tools"] = [{"type": "otari_web_search"}]
 
         try:

@@ -46,6 +46,13 @@ async def test_structured_completion_sends_hosted_contract_and_parses_usage() ->
         assert body["response_format"]["json_schema"]["strict"] is True
         schema = body["response_format"]["json_schema"]["schema"]
         assert schema["additionalProperties"] is False
+        planned_task_schema = schema["$defs"]["PlannedChildTask"]
+        source_url_schema = planned_task_schema["properties"]["source_urls"]["items"]
+        assert "format" not in source_url_schema
+        assert set(planned_task_schema["required"]) == set(planned_task_schema["properties"])
+        serialized_schema = json.dumps(schema)
+        for keyword in ("default", "format"):
+            assert f'"{keyword}"' not in serialized_schema
         assert request.extensions["timeout"]["read"] == 12.0
         return httpx.Response(
             200,
@@ -80,6 +87,8 @@ async def test_omits_optional_tool_when_web_search_is_disabled() -> None:
         assert request.headers["authorization"] == "Bearer hosted-ai-token"
         body = json.loads((await request.aread()).decode())
         assert "tools" not in body
+        assert "parallel_tool_calls" not in body
+        assert "max_tool_iterations" not in body
         return httpx.Response(200, content=fixture_bytes())
 
     async with OtariClient(settings(), transport=httpx.MockTransport(handler)) as client:

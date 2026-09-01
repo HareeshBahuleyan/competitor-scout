@@ -56,7 +56,13 @@ def _messages(payload: object, instruction: str) -> list[dict[str, str]]:
 def planning_messages(context: object) -> list[dict[str, str]]:
     return _messages(
         context,
-        "Create a bounded ScoutPlan only. Planning has no tool access.",
+        (
+            "Create a bounded ScoutPlan only. Planning has no tool access. "
+            "Every first_party_source_review task must use one or more approved source_urls, "
+            "set search_query to null, and set max_search_calls to at least 1. Every "
+            "news_discovery task must use no source_urls, provide a non-empty search_query, "
+            "and set max_search_calls to at least 1. Never exceed the supplied limits."
+        ),
     )
 
 
