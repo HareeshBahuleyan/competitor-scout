@@ -108,7 +108,7 @@ class WeeklyBriefHandler:
             return await self._stop_for_cost(prepared)
         try:
             result, metadata = await self._client.structured_completion(
-                model=self._settings.otari_main_model_alias,
+                model=self._settings.otari_main_model,
                 messages=messages,
                 output_type=WeeklyBriefResult,
                 session_label=f"weekly:{run_id}",
@@ -233,7 +233,7 @@ class WeeklyBriefHandler:
                     role=AgentTaskRole.MAIN_SYNTHESIZER,
                     task_kind="weekly_synthesis",
                     status=AgentTaskStatus.RUNNING,
-                    model_alias=self._settings.otari_main_model_alias,
+                    model=self._settings.otari_main_model,
                     objective="Summarize accepted findings into a grounded weekly brief",
                     source_scope=[str(finding.id) for finding in findings],
                     attempt_count=1,
@@ -433,7 +433,7 @@ class WeeklyBriefHandler:
             return False
         try:
             estimate = self._cost_estimator(
-                self._settings.otari_main_model_alias,
+                self._settings.otari_main_model,
                 self._settings.main_output_token_limit,
                 False,
             )
@@ -512,7 +512,7 @@ class WeeklyBriefHandler:
                 scout_run_id=run.id,
                 agent_task_id=task.id,
                 provider_request_id=metadata.request_id,
-                model_alias=self._settings.otari_main_model_alias,
+                model=self._settings.otari_main_model,
                 input_tokens=usage.input_tokens,
                 output_tokens=usage.output_tokens,
                 tool_calls=usage.tool_calls,

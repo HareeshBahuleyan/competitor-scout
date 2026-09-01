@@ -49,6 +49,16 @@ def test_operational_defaults_are_bounded() -> None:
     assert settings.max_otari_concurrency == 8
 
 
+def test_otari_models_use_suffix_free_environment_names(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OTARI_MAIN_MODEL", "configured-main-model")
+    monkeypatch.setenv("OTARI_CHILD_MODEL", "configured-child-model")
+
+    settings = Settings(**valid_values())
+
+    assert settings.otari_main_model == "configured-main-model"
+    assert settings.otari_child_model == "configured-child-model"
+
+
 def test_cost_limits_use_decimal_values() -> None:
     settings = Settings(**valid_values())
 

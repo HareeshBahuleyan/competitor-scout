@@ -204,7 +204,7 @@ class SourceDiscoveryHandler:
                 role=AgentTaskRole.MAIN_PLANNER,
                 task_kind="source_discovery",
                 status=AgentTaskStatus.RUNNING,
-                model_alias=self._settings.otari_main_model_alias,
+                model=self._settings.otari_main_model,
                 objective="Discover useful public first-party monitoring sources",
                 source_scope=[f"https://{competitor.primary_domain}"],
                 attempt_count=1,
@@ -302,7 +302,7 @@ class SourceDiscoveryHandler:
             return None
         try:
             estimate = self._cost_estimator(
-                self._settings.otari_main_model_alias,
+                self._settings.otari_main_model,
                 self._settings.main_output_token_limit,
                 True,
             )
@@ -421,7 +421,7 @@ class SourceDiscoveryHandler:
                 scout_run_id=run.id,
                 agent_task_id=task.id,
                 provider_request_id=outcome.metadata.request_id,
-                model_alias=self._settings.otari_main_model_alias,
+                model=self._settings.otari_main_model,
                 input_tokens=usage.input_tokens,
                 output_tokens=usage.output_tokens,
                 tool_calls=usage.tool_calls,

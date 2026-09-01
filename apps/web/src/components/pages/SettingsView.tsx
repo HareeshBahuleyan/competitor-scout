@@ -172,7 +172,7 @@ export function SettingsView() {
             Usage summary
           </h2>
           <p className="mt-1 text-sm text-slate-600">
-            Informational totals grouped by date and configured model alias.
+            Informational totals grouped by date and configured model.
           </p>
         </div>
         {usage.data.items.length ? (
@@ -181,7 +181,7 @@ export function SettingsView() {
               <thead className="bg-slate-50">
                 <tr>
                   <th className="p-3">Date</th>
-                  <th className="p-3">Model alias</th>
+                  <th className="p-3">Model</th>
                   <th className="p-3">Input tokens</th>
                   <th className="p-3">Output tokens</th>
                   <th className="p-3">Tool calls</th>
@@ -190,9 +190,9 @@ export function SettingsView() {
               </thead>
               <tbody>
                 {usage.data.items.map((row) => (
-                  <tr className="border-t border-slate-200" key={`${row.date}-${row.model_alias}`}>
+                  <tr className="border-t border-slate-200" key={`${row.date}-${row.model}`}>
                     <td className="p-3">{row.date}</td>
-                    <td className="p-3">{row.model_alias}</td>
+                    <td className="p-3">{row.model}</td>
                     <td className="p-3">{row.input_tokens.toLocaleString()}</td>
                     <td className="p-3">{row.output_tokens.toLocaleString()}</td>
                     <td className="p-3">{row.tool_calls ?? "Unknown"}</td>

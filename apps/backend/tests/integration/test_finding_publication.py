@@ -80,7 +80,7 @@ async def seed_context(sessions, stem: str = "publisher") -> PublicationContext:
             role=AgentTaskRole.CHILD_RESEARCHER,
             task_kind="first_party_source_review",
             status=AgentTaskStatus.SUCCEEDED,
-            model_alias="competitor-scout-child",
+            model="competitor-scout-child",
             objective="Review pricing",
         )
         session.add(task)
@@ -119,7 +119,7 @@ async def seed_context_with_lifecycle(
             role=task_role,
             task_kind="first_party_source_review",
             status=task_status,
-            model_alias="competitor-scout-child",
+            model="competitor-scout-child",
             objective="Review pricing",
         )
         session.add(task)
@@ -544,7 +544,7 @@ async def test_exact_evidence_reuse_keeps_first_observation_provenance(
             role=AgentTaskRole.CHILD_RESEARCHER,
             task_kind="first_party_source_review",
             status=AgentTaskStatus.SUCCEEDED,
-            model_alias="competitor-scout-child",
+            model="competitor-scout-child",
             objective="Review pricing again",
         )
         session.add(later_task)
@@ -686,7 +686,7 @@ async def api_finding(db_session, user: User, *, category, significance, confide
         role=AgentTaskRole.CHILD_RESEARCHER,
         task_kind="first_party_source_review",
         status=AgentTaskStatus.SUCCEEDED,
-        model_alias="child",
+        model="child",
         objective="Research",
     )
     item = EvidenceItem(

@@ -58,7 +58,7 @@ def discovery_settings() -> Settings:
         google_client_secret="google-secret",
         otari_base_url="https://otari.invalid",
         otari_ai_token="dummy-never-live",
-        otari_main_model_alias="competitor-scout-main",
+        otari_main_model="competitor-scout-main",
         max_child_search_calls=2,
     )
 
@@ -406,7 +406,7 @@ async def test_stale_planning_run_is_terminally_failed_without_repeating_otari(
                 role=AgentTaskRole.MAIN_PLANNER,
                 task_kind="source_discovery",
                 status=AgentTaskStatus.RUNNING,
-                model_alias="competitor-scout-main",
+                model="competitor-scout-main",
                 objective="Discover sources",
                 attempt_count=1,
                 started_at=NOW.replace(minute=0),

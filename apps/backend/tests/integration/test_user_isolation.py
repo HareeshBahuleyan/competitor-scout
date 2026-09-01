@@ -116,7 +116,7 @@ async def test_complete_cross_user_api_isolation_matrix(db_session) -> None:
         role=AgentTaskRole.CHILD_RESEARCHER,
         task_kind="first_party_source_review",
         status=AgentTaskStatus.SUCCEEDED,
-        model_alias="private-owner-model-alias",
+        model="private-owner-model",
         objective="Private task objective",
     )
     evidence = EvidenceItem(
@@ -178,7 +178,7 @@ async def test_complete_cross_user_api_isolation_matrix(db_session) -> None:
         scout_run=run,
         agent_task=task,
         provider_request_id="private-provider-id",
-        model_alias="private-owner-model-alias",
+        model="private-owner-model",
         input_tokens=10,
         output_tokens=5,
         tool_calls=1,
@@ -234,7 +234,7 @@ async def test_complete_cross_user_api_isolation_matrix(db_session) -> None:
         "Private Evidence Identity",
         "Private Finding Identity",
         "Private Brief Identity",
-        "private-owner-model-alias",
+        "private-owner-model",
         "private-provider-id",
         "private-pricing-source",
     }

@@ -96,7 +96,7 @@ test("explains a partial run and its retries", async ({ page }) => {
             role: "child_researcher",
             task_kind: "pricing",
             status: "failed",
-            model_alias: "competitor-scout-child",
+            model: "competitor-scout-child",
             objective: "Review pricing",
             source_scope: ["https://acme.example/pricing"],
             attempt_count: 2,

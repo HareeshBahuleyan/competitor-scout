@@ -66,15 +66,15 @@ async def usage_summary_route(db: DbSession, user: CurrentUser) -> UsageSummary:
         await db.execute(
             select(
                 utc_date.label("date"),
-                UsageEvent.model_alias,
+                UsageEvent.model,
                 func.sum(UsageEvent.input_tokens).label("input_tokens"),
                 func.sum(UsageEvent.output_tokens).label("output_tokens"),
                 tool_calls.label("tool_calls"),
                 settled_cost.label("settled_cost_usd"),
             )
             .where(UsageEvent.user_id == user.id)
-            .group_by(utc_date, UsageEvent.model_alias)
-            .order_by(utc_date.desc(), UsageEvent.model_alias)
+            .group_by(utc_date, UsageEvent.model)
+            .order_by(utc_date.desc(), UsageEvent.model)
         )
     ).all()
     return UsageSummary(items=[UsageSummaryRow.model_validate(row._mapping) for row in rows])

@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     google_client_secret: SecretStr
     otari_base_url: AnyHttpUrl
     otari_ai_token: SecretStr = Field(min_length=1)
-    otari_main_model_alias: str = "competitor-scout-main"
-    otari_child_model_alias: str = "competitor-scout-child"
+    otari_main_model: str = "competitor-scout-main"
+    otari_child_model: str = "competitor-scout-child"
 
     max_active_users: int = Field(default=10, ge=1, le=100)
     max_active_competitors: int = Field(default=10, ge=1, le=100)

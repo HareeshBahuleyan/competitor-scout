@@ -25,6 +25,6 @@ def test_configured_estimator_is_conservative_and_model_specific() -> None:
     configured = settings()
     estimator = ConfiguredCostEstimator(configured)
 
-    assert estimator(configured.otari_main_model_alias, 4000, False) == Decimal("0.12")
-    assert estimator(configured.otari_child_model_alias, 3000, True) == Decimal("0.07")
-    assert estimator("unknown-alias", 1, False) == Decimal("0.12")
+    assert estimator(configured.otari_main_model, 4000, False) == Decimal("0.12")
+    assert estimator(configured.otari_child_model, 3000, True) == Decimal("0.07")
+    assert estimator("unknown-model", 1, False) == Decimal("0.12")

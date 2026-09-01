@@ -78,7 +78,7 @@ async def add_usage(
     db_session,
     *,
     user: User,
-    model_alias: str,
+    model: str,
     occurred_at: datetime,
     input_tokens: int,
     output_tokens: int,
@@ -103,7 +103,7 @@ async def add_usage(
         role=AgentTaskRole.CHILD_RESEARCHER,
         task_kind="research",
         status=AgentTaskStatus.SUCCEEDED,
-        model_alias=model_alias,
+        model=model,
         objective="Synthetic public research",
     )
     event = UsageEvent(
@@ -111,7 +111,7 @@ async def add_usage(
         scout_run=run,
         agent_task=task,
         provider_request_id=provider_request_id,
-        model_alias=model_alias,
+        model=model,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         tool_calls=tool_calls,
@@ -187,7 +187,7 @@ async def test_settings_reject_invalid_timezone_and_developer_fields(db_session)
         developer_field = await client.patch(
             "/api/v1/settings",
             headers={"X-CSRF-Token": token},
-            json={"otari_main_model_alias": "forbidden", "daily_cost_ceiling_usd": 99},
+            json={"otari_main_model": "forbidden", "daily_cost_ceiling_usd": 99},
         )
 
     assert invalid_zone.status_code == 422
@@ -229,7 +229,7 @@ async def test_usage_summary_groups_by_utc_date_and_model_without_identifiers(db
     await add_usage(
         db_session,
         user=user,
-        model_alias="child-model",
+        model="child-model",
         occurred_at=datetime(2026, 8, 21, 22, 30, tzinfo=UTC),
         input_tokens=100,
         output_tokens=20,
@@ -240,7 +240,7 @@ async def test_usage_summary_groups_by_utc_date_and_model_without_identifiers(db
     await add_usage(
         db_session,
         user=user,
-        model_alias="child-model",
+        model="child-model",
         occurred_at=datetime(2026, 8, 21, 23, 45, tzinfo=UTC),
         input_tokens=50,
         output_tokens=10,
@@ -251,7 +251,7 @@ async def test_usage_summary_groups_by_utc_date_and_model_without_identifiers(db
     await add_usage(
         db_session,
         user=user,
-        model_alias="main-model",
+        model="main-model",
         occurred_at=datetime(2026, 8, 22, 0, 15, tzinfo=UTC),
         input_tokens=80,
         output_tokens=30,
@@ -262,7 +262,7 @@ async def test_usage_summary_groups_by_utc_date_and_model_without_identifiers(db
     await add_usage(
         db_session,
         user=outsider,
-        model_alias="secret-outsider-model",
+        model="secret-outsider-model",
         occurred_at=datetime(2026, 8, 21, 22, 30, tzinfo=UTC),
         input_tokens=999,
         output_tokens=999,
@@ -279,7 +279,7 @@ async def test_usage_summary_groups_by_utc_date_and_model_without_identifiers(db
         "items": [
             {
                 "date": "2026-08-22",
-                "model_alias": "main-model",
+                "model": "main-model",
                 "input_tokens": 80,
                 "output_tokens": 30,
                 "tool_calls": None,
@@ -287,7 +287,7 @@ async def test_usage_summary_groups_by_utc_date_and_model_without_identifiers(db
             },
             {
                 "date": "2026-08-21",
-                "model_alias": "child-model",
+                "model": "child-model",
                 "input_tokens": 150,
                 "output_tokens": 30,
                 "tool_calls": 3,
@@ -308,7 +308,7 @@ async def test_usage_event_roundtrips_without_provider_request_id(db_session) ->
     event = await add_usage(
         db_session,
         user=user,
-        model_alias="main-model",
+        model="main-model",
         occurred_at=datetime(2026, 8, 21, 12, 0, tzinfo=UTC),
         input_tokens=12,
         output_tokens=3,
@@ -396,7 +396,7 @@ async def test_usage_summary_uses_persisted_rows(db_session) -> None:
     event = await add_usage(
         db_session,
         user=user,
-        model_alias="persisted-model",
+        model="persisted-model",
         occurred_at=datetime(2026, 8, 20, 12, 0, tzinfo=UTC),
         input_tokens=7,
         output_tokens=4,
@@ -407,4 +407,4 @@ async def test_usage_summary_uses_persisted_rows(db_session) -> None:
     persisted = await db_session.scalar(select(UsageEvent).where(UsageEvent.id == event.id))
 
     assert persisted is not None
-    assert persisted.model_alias == "persisted-model"
+    assert persisted.model == "persisted-model"

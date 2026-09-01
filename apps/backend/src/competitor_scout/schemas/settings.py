@@ -53,7 +53,7 @@ class UserSettingsUpdate(BaseModel):
 
 class UsageSummaryRow(BaseModel):
     date: date
-    model_alias: str
+    model: str
     input_tokens: int
     output_tokens: int
     tool_calls: int | None

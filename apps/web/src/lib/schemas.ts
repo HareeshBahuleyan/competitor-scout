@@ -193,7 +193,7 @@ export const agentTaskSchema = z.object({
   role: z.enum(["main_planner", "child_researcher", "main_synthesizer"]),
   task_kind: z.string(),
   status: z.enum(["queued", "running", "succeeded", "failed", "cancelled"]),
-  model_alias: z.string(),
+  model: z.string(),
   objective: z.string(),
   source_scope: z.array(z.string()),
   attempt_count: z.number().int().nonnegative(),
@@ -275,7 +275,7 @@ export type UserSettings = z.infer<typeof settingsSchema>;
 
 export const usageSummaryRowSchema = z.object({
   date: z.string().date(),
-  model_alias: z.string().min(1),
+  model: z.string().min(1),
   input_tokens: z.number().int().nonnegative(),
   output_tokens: z.number().int().nonnegative(),
   tool_calls: z.number().int().nonnegative().nullable(),

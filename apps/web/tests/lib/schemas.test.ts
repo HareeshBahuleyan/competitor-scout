@@ -158,7 +158,7 @@ describe("audit schemas", () => {
       role: "child_researcher",
       task_kind: "pricing",
       status: "succeeded",
-      model_alias: "research",
+      model: "research",
       objective: "Review pricing",
       source_scope: ["https://example.com"],
       attempt_count: 1,
@@ -256,7 +256,7 @@ describe("brief, settings, and aggregate usage schemas", () => {
         display_name: "Founder",
         timezone: "Europe/Berlin",
         default_daily_time: "08:30:00",
-        main_model_alias: "must-not-reach-the-view",
+        main_model: "must-not-reach-the-view",
       }),
     ).toEqual({
       display_name: "Founder",
@@ -276,7 +276,7 @@ describe("brief, settings, and aggregate usage schemas", () => {
         items: [
           {
             date: "2026-08-21",
-            model_alias: "competitor-scout-main",
+            model: "competitor-scout-main",
             input_tokens: 100,
             output_tokens: 20,
             tool_calls: null,

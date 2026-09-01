@@ -52,8 +52,8 @@ async def run_case(
     client: OtariClient,
     case: dict[str, Any],
     *,
-    main_alias: str,
-    child_alias: str,
+    main_model: str,
+    child_model: str,
     child_tokens: int,
     main_tokens: int,
     child_deadline: int,
@@ -61,7 +61,7 @@ async def run_case(
 ) -> dict[str, Any]:
     case_id = str(case["id"])
     child_result, child_metadata = await client.structured_completion(
-        model=child_alias,
+        model=child_model,
         messages=child_messages(
             {
                 "objective": "Extract only directly quoted material competitor changes.",
@@ -76,7 +76,7 @@ async def run_case(
         deadline_seconds=child_deadline,
     )
     synthesis_result, main_metadata = await client.structured_completion(
-        model=main_alias,
+        model=main_model,
         messages=synthesis_messages(child_result),
         output_type=SynthesisResult,
         session_label=f"live-eval:{case_id}:main",
@@ -138,8 +138,8 @@ async def run_live() -> int:
                 result = await run_case(
                     client,
                     case,
-                    main_alias=settings.otari_main_model_alias,
-                    child_alias=settings.otari_child_model_alias,
+                    main_model=settings.otari_main_model,
+                    child_model=settings.otari_child_model,
                     child_tokens=settings.child_output_token_limit,
                     main_tokens=settings.main_output_token_limit,
                     child_deadline=settings.child_deadline_seconds,

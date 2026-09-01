@@ -85,7 +85,7 @@ const usage = {
   items: [
     {
       date: "2026-08-21",
-      model_alias: "competitor-scout-main",
+      model: "competitor-scout-main",
       input_tokens: 100,
       output_tokens: 20,
       tool_calls: null,

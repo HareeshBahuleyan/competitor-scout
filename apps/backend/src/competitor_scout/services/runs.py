@@ -231,7 +231,7 @@ def task_read(task: AgentTask) -> TaskRead:
         role=task.role,
         task_kind=task.task_kind,
         status=task.status,
-        model_alias=task.model_alias,
+        model=task.model,
         objective=_safe_objective(task),
         source_scope=_safe_source_scope(task),
         attempt_count=task.attempt_count,
@@ -463,9 +463,9 @@ class _UsageGroup:
         elif self.cost_known:
             self.settled_cost_usd += event.settled_cost_usd
 
-    def read(self, model_alias: str) -> ModelUsageRead:
+    def read(self, model: str) -> ModelUsageRead:
         return ModelUsageRead(
-            model_alias=model_alias,
+            model=model,
             input_tokens=self.input_tokens,
             output_tokens=self.output_tokens,
             tool_calls=self.tool_calls if self.tool_calls_known else None,
@@ -485,12 +485,12 @@ async def run_usage(session: AsyncSession, run: ScoutRun) -> RunUsageRead:
     )
     groups: dict[str, _UsageGroup] = {}
     for event in events:
-        groups.setdefault(event.model_alias, _UsageGroup()).add(event)
+        groups.setdefault(event.model, _UsageGroup()).add(event)
     return RunUsageRead(
         run_id=run.id,
         input_tokens=run.input_tokens,
         output_tokens=run.output_tokens,
         tool_calls=run.tool_calls,
         settled_cost_usd=run.settled_cost_usd,
-        models=[groups[alias].read(alias) for alias in sorted(groups)],
+        models=[groups[model].read(model) for model in sorted(groups)],
     )

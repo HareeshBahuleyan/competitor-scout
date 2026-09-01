@@ -311,7 +311,7 @@ class AgentTask(Base):
         default=AgentTaskStatus.QUEUED,
         server_default=AgentTaskStatus.QUEUED.value,
     )
-    model_alias: Mapped[str] = mapped_column(String(200))
+    model: Mapped[str] = mapped_column(String(200))
     objective: Mapped[str] = mapped_column(Text)
     source_scope: Mapped[list[object]] = mapped_column(
         JSONB,
@@ -363,7 +363,7 @@ class UsageEvent(Base):
         index=True,
     )
     provider_request_id: Mapped[str | None] = mapped_column(String(255), index=True)
-    model_alias: Mapped[str] = mapped_column(String(200))
+    model: Mapped[str] = mapped_column(String(200))
     input_tokens: Mapped[int] = mapped_column(Integer)
     output_tokens: Mapped[int] = mapped_column(Integer)
     tool_calls: Mapped[int | None] = mapped_column(Integer)

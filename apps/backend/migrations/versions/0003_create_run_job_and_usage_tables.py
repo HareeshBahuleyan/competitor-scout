@@ -139,7 +139,7 @@ def upgrade() -> None:
         sa.Column("role", agent_task_role, nullable=False),
         sa.Column("task_kind", sa.String(length=100), nullable=False),
         sa.Column("status", agent_task_status, server_default="queued", nullable=False),
-        sa.Column("model_alias", sa.String(length=200), nullable=False),
+        sa.Column("model", sa.String(length=200), nullable=False),
         sa.Column("objective", sa.Text(), nullable=False),
         sa.Column(
             "source_scope",
@@ -192,7 +192,7 @@ def upgrade() -> None:
         sa.Column("scout_run_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("agent_task_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("provider_request_id", sa.String(length=255), nullable=False),
-        sa.Column("model_alias", sa.String(length=200), nullable=False),
+        sa.Column("model", sa.String(length=200), nullable=False),
         sa.Column("input_tokens", sa.Integer(), nullable=False),
         sa.Column("output_tokens", sa.Integer(), nullable=False),
         sa.Column("tool_calls", sa.Integer(), nullable=True),

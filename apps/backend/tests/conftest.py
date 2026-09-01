@@ -22,6 +22,8 @@ TEST_ENV = {
     "GOOGLE_CLIENT_SECRET": "test-google-client-secret",
     "OTARI_BASE_URL": "https://otari.invalid",
     "OTARI_AI_TOKEN": "test-otari-token",
+    "OTARI_MAIN_MODEL": "competitor-scout-main",
+    "OTARI_CHILD_MODEL": "competitor-scout-child",
 }
 
 os.environ.update(TEST_ENV)

@@ -360,7 +360,7 @@ async def seed_run_api_detail(sessions) -> tuple[User, User, ScoutRun]:
             role=AgentTaskRole.CHILD_RESEARCHER,
             task_kind="first_party_source_review",
             status=AgentTaskStatus.SUCCEEDED,
-            model_alias="competitor-scout-child",
+            model="competitor-scout-child",
             objective="Raw prompt with authorization and otari_ai_token=top-secret",
             source_scope=["private prompt scope"],
             attempt_count=2,
@@ -397,7 +397,7 @@ async def seed_run_api_detail(sessions) -> tuple[User, User, ScoutRun]:
             role=AgentTaskRole.MAIN_PLANNER,
             task_kind="daily_planning",
             status=AgentTaskStatus.SUCCEEDED,
-            model_alias="competitor-scout-main",
+            model="competitor-scout-main",
             objective="Private planning prompt",
             source_scope=["private"],
             attempt_count=1,
@@ -416,7 +416,7 @@ async def seed_run_api_detail(sessions) -> tuple[User, User, ScoutRun]:
                     scout_run_id=run.id,
                     agent_task_id=child.id,
                     provider_request_id="provider-child",
-                    model_alias="competitor-scout-child",
+                    model="competitor-scout-child",
                     input_tokens=20,
                     output_tokens=10,
                     tool_calls=None,
@@ -429,7 +429,7 @@ async def seed_run_api_detail(sessions) -> tuple[User, User, ScoutRun]:
                     scout_run_id=run.id,
                     agent_task_id=planner.id,
                     provider_request_id="provider-main",
-                    model_alias="competitor-scout-main",
+                    model="competitor-scout-main",
                     input_tokens=10,
                     output_tokens=5,
                     tool_calls=0,
@@ -523,7 +523,7 @@ async def test_run_read_apis_are_filtered_cursor_paginated_and_safe(run_store) -
             "role",
             "task_kind",
             "status",
-            "model_alias",
+            "model",
             "objective",
             "source_scope",
             "attempt_count",
@@ -558,7 +558,7 @@ async def test_run_read_apis_are_filtered_cursor_paginated_and_safe(run_store) -
     assert usage.json()["output_tokens"] == 15
     assert usage.json()["tool_calls"] is None
     assert usage.json()["settled_cost_usd"] is None
-    by_model = {item["model_alias"]: item for item in usage.json()["models"]}
+    by_model = {item["model"]: item for item in usage.json()["models"]}
     assert by_model["competitor-scout-child"]["tool_calls"] is None
     assert by_model["competitor-scout-child"]["settled_cost_usd"] is None
     assert by_model["competitor-scout-main"]["settled_cost_usd"] == "0.200000"

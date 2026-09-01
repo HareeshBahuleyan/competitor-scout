@@ -29,7 +29,7 @@ Set these on both `api` and `worker` unless noted otherwise:
 - `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
 - `OTARI_BASE_URL=https://api.otari.ai`
 - `OTARI_AI_TOKEN` (the only supported Otari credential)
-- `OTARI_MAIN_MODEL_ALIAS` and `OTARI_CHILD_MODEL_ALIAS`
+- `OTARI_MAIN_MODEL` and `OTARI_CHILD_MODEL`
 - all documented task, deadline, concurrency, confidence, and cost-ceiling variables from `.env.example`
 
 Do not configure `E2E_AUTH_SECRET` in production.
@@ -65,7 +65,7 @@ consume an active slot.
 
 ## Otari deployment gate
 
-Hosted Otari structured output, model aliases, Tavily-backed web-search entitlement,
+Hosted Otari structured output, configured models, Tavily-backed web-search entitlement,
 request IDs, pricing metadata, and the configured ceilings must be verified in a
 staging Railway project before production monitoring is enabled. This is a paid
 external test and requires explicit approval. Never use the dummy local token for it.

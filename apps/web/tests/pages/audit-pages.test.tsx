@@ -156,7 +156,7 @@ describe("run pages", () => {
               role: "child_researcher",
               task_kind: "pricing",
               status: "succeeded",
-              model_alias: "research",
+              model: "research",
               objective: "Review first-party pricing",
               source_scope: ["https://acme.example/pricing"],
               attempt_count: 2,

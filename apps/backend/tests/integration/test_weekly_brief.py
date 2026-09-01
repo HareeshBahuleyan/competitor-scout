@@ -197,7 +197,7 @@ async def seed_brief_run(
             role=AgentTaskRole.CHILD_RESEARCHER,
             task_kind="first_party_source_review",
             status=AgentTaskStatus.SUCCEEDED,
-            model_alias="competitor-scout-child",
+            model="competitor-scout-child",
             objective="Review accepted source",
         )
         weekly_run = ScoutRun(
@@ -327,7 +327,7 @@ async def test_grounded_brief_uses_only_local_period_findings_and_is_idempotent(
     assert await handler.handle(seeded.run_id) is ScoutRunStatus.COMPLETED
     assert len(client.calls) == 1
     call = client.calls[0]
-    assert call["model"] == settings().otari_main_model_alias
+    assert call["model"] == settings().otari_main_model
     assert call["enable_web_search"] is False
     assert call["max_tool_iterations"] == 1
     input_payload = json.loads(call["messages"][1]["content"])
@@ -438,7 +438,7 @@ async def test_reclaimed_synthesizing_brief_terminalizes_without_repeating_otari
                 role=AgentTaskRole.MAIN_SYNTHESIZER,
                 task_kind="weekly_synthesis",
                 status=AgentTaskStatus.RUNNING,
-                model_alias="competitor-scout-main",
+                model="competitor-scout-main",
                 objective="Summarize accepted findings into a grounded weekly brief",
                 source_scope=[str(item) for item in seeded.finding_ids],
                 attempt_count=1,

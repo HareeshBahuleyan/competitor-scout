@@ -140,7 +140,7 @@ class TaskRead(BaseModel):
     role: AgentTaskRole
     task_kind: str
     status: AgentTaskStatus
-    model_alias: str
+    model: str
     objective: str
     source_scope: list[str]
     attempt_count: int
@@ -159,7 +159,7 @@ class TaskRead(BaseModel):
 class ModelUsageRead(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    model_alias: str
+    model: str
     input_tokens: int
     output_tokens: int
     tool_calls: int | None

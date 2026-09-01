@@ -407,7 +407,7 @@ class ScoutOrchestrator:
                 role=AgentTaskRole.MAIN_PLANNER,
                 task_kind="daily_planning",
                 status=AgentTaskStatus.RUNNING,
-                model_alias=self._settings.otari_main_model_alias,
+                model=self._settings.otari_main_model,
                 objective="Create a bounded daily Scout plan",
                 source_scope=list(approved_urls),
                 started_at=now,
@@ -516,7 +516,7 @@ class ScoutOrchestrator:
             if self._request_would_exceed_cost_ceiling(
                 context,
                 usage,
-                model_alias=self._settings.otari_main_model_alias,
+                model=self._settings.otari_main_model,
                 max_completion_tokens=self._settings.main_output_token_limit,
                 enable_web_search=False,
             ):
@@ -536,7 +536,7 @@ class ScoutOrchestrator:
             await self._set_task_attempt(context.planner_task_id, attempt)
             try:
                 plan, metadata = await self._client.structured_completion(
-                    model=self._settings.otari_main_model_alias,
+                    model=self._settings.otari_main_model,
                     messages=messages,
                     output_type=ScoutPlan,
                     session_label=f"daily:{context.run_id}:planning",
@@ -606,7 +606,7 @@ class ScoutOrchestrator:
                     parent_task_id=context.planner_task_id,
                     role=AgentTaskRole.CHILD_RESEARCHER,
                     task_kind=planned.kind.value,
-                    model_alias=self._settings.otari_child_model_alias,
+                    model=self._settings.otari_child_model,
                     objective=planned.objective,
                     source_scope=scope,
                 )
@@ -653,7 +653,7 @@ class ScoutOrchestrator:
                     if self._request_would_exceed_cost_ceiling(
                         context,
                         usage,
-                        model_alias=self._settings.otari_child_model_alias,
+                        model=self._settings.otari_child_model,
                         max_completion_tokens=self._settings.child_output_token_limit,
                         enable_web_search=True,
                     ):
@@ -672,7 +672,7 @@ class ScoutOrchestrator:
                     if self._estimated_tokens(messages) > self._settings.child_input_token_limit:
                         raise PlanValidationError("child_input_token_limit")
                     result, metadata = await self._client.structured_completion(
-                        model=self._settings.otari_child_model_alias,
+                        model=self._settings.otari_child_model,
                         messages=messages,
                         output_type=ChildTaskResult,
                         session_label=f"daily:{context.run_id}:child:{task_id}",
@@ -906,7 +906,7 @@ class ScoutOrchestrator:
             if self._request_would_exceed_cost_ceiling(
                 context,
                 usage,
-                model_alias=self._settings.otari_main_model_alias,
+                model=self._settings.otari_main_model,
                 max_completion_tokens=self._settings.main_output_token_limit,
                 enable_web_search=False,
             ):
@@ -922,7 +922,7 @@ class ScoutOrchestrator:
             await self._set_task_attempt(task_id, attempt)
             try:
                 result, metadata = await self._client.structured_completion(
-                    model=self._settings.otari_main_model_alias,
+                    model=self._settings.otari_main_model,
                     messages=messages,
                     output_type=SynthesisResult,
                     session_label=f"daily:{context.run_id}:synthesis",
@@ -973,7 +973,7 @@ class ScoutOrchestrator:
                 parent_task_id=context.planner_task_id,
                 role=AgentTaskRole.MAIN_SYNTHESIZER,
                 task_kind="daily_synthesis",
-                model_alias=self._settings.otari_main_model_alias,
+                model=self._settings.otari_main_model,
                 objective="Synthesize validated evidence into publishable findings",
                 source_scope=[],
                 status=AgentTaskStatus.RUNNING,
@@ -1069,7 +1069,7 @@ class ScoutOrchestrator:
                     scout_run_id=context.run_id,
                     agent_task_id=task.id,
                     provider_request_id=metadata.request_id,
-                    model_alias=task.model_alias,
+                    model=task.model,
                     input_tokens=metadata.usage.input_tokens,
                     output_tokens=metadata.usage.output_tokens,
                     tool_calls=metadata.usage.tool_calls,
@@ -1110,7 +1110,7 @@ class ScoutOrchestrator:
                             scout_run_id=context.run_id,
                             agent_task_id=task.id,
                             provider_request_id=metadata.request_id,
-                            model_alias=task.model_alias,
+                            model=task.model,
                             input_tokens=metadata.usage.input_tokens,
                             output_tokens=metadata.usage.output_tokens,
                             tool_calls=metadata.usage.tool_calls,
@@ -1208,7 +1208,7 @@ class ScoutOrchestrator:
         context: _RunContext,
         usage: _UsageAccumulator,
         *,
-        model_alias: str,
+        model: str,
         max_completion_tokens: int,
         enable_web_search: bool,
     ) -> bool:
@@ -1216,7 +1216,7 @@ class ScoutOrchestrator:
             return False
         try:
             estimate = self._cost_estimator(
-                model_alias,
+                model,
                 max_completion_tokens,
                 enable_web_search,
             )
@@ -1312,7 +1312,7 @@ class SourceDiscoveryService:
             )
         )
         result, metadata = await self._client.structured_completion(
-            model=self._settings.otari_main_model_alias,
+            model=self._settings.otari_main_model,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": payload},
