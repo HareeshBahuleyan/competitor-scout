@@ -9,11 +9,13 @@ export function FindingCard({ finding }: { finding: Finding }) {
         <span
           aria-hidden="true"
           className={`mt-1.5 size-2.5 shrink-0 rounded-full ${
-            finding.significance_level === "high"
-              ? "bg-[#d34d50]"
-              : finding.significance_level === "medium"
-                ? "bg-amber-500"
-                : "bg-slate-300"
+            finding.significance_level === "critical"
+              ? "bg-[var(--color-danger)]"
+              : finding.significance_level === "high"
+                ? "bg-[#d34d50]"
+                : finding.significance_level === "medium"
+                  ? "bg-amber-500"
+                  : "bg-slate-300"
           }`}
         />
         <div className="min-w-0 flex-1">

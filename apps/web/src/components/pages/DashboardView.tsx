@@ -31,6 +31,11 @@ export function DashboardView() {
     queryKey: ["dashboard", "competitors"],
     queryFn: () => apiGetClient("/api/v1/competitors?limit=100", competitorPageSchema),
   });
+  const criticalFindings = useQuery({
+    queryKey: ["dashboard", "findings", "critical"],
+    queryFn: () =>
+      apiGetClient("/api/v1/findings?significance=critical&limit=5", findingPageSchema),
+  });
   const highFindings = useQuery({
     queryKey: ["dashboard", "findings", "high"],
     queryFn: () => apiGetClient("/api/v1/findings?significance=high&limit=5", findingPageSchema),
@@ -48,7 +53,7 @@ export function DashboardView() {
     queryFn: () => apiGetClient("/api/v1/briefs?limit=1", weeklyBriefPageSchema),
   });
 
-  const queries = [competitors, highFindings, mediumFindings, runs, briefs];
+  const queries = [competitors, criticalFindings, highFindings, mediumFindings, runs, briefs];
   if (queries.some((query) => query.isPending)) {
     return <LoadingState label="Loading dashboard…" rows={5} />;
   }
@@ -61,11 +66,19 @@ export function DashboardView() {
     );
 
   const competitorPage = competitors.data;
+  const criticalFindingPage = criticalFindings.data;
   const highFindingPage = highFindings.data;
   const mediumFindingPage = mediumFindings.data;
   const runPage = runs.data;
   const briefPage = briefs.data;
-  if (!competitorPage || !highFindingPage || !mediumFindingPage || !runPage || !briefPage) {
+  if (
+    !competitorPage ||
+    !criticalFindingPage ||
+    !highFindingPage ||
+    !mediumFindingPage ||
+    !runPage ||
+    !briefPage
+  ) {
     return (
       <p className="text-red-700" role="alert">
         Dashboard data is unavailable.
@@ -74,7 +87,11 @@ export function DashboardView() {
   }
 
   const activeCompetitors = competitorPage.items.filter((item) => item.status === "active");
-  const materialFindings = [...highFindingPage.items, ...mediumFindingPage.items]
+  const materialFindings = [
+    ...criticalFindingPage.items,
+    ...highFindingPage.items,
+    ...mediumFindingPage.items,
+  ]
     .sort((left, right) => right.published_at.localeCompare(left.published_at))
     .slice(0, 10);
   const unhealthyRuns = runPage.items.filter(

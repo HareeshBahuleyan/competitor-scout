@@ -138,6 +138,12 @@ describe("dashboard", () => {
         finding,
         {
           ...finding,
+          id: "77777777-7777-4777-8777-777777777777",
+          title: "Critical signal",
+          significance_level: "critical",
+        },
+        {
+          ...finding,
           id: "66666666-6666-4666-8666-666666666666",
           title: "Low signal",
           significance_level: "low",
@@ -158,6 +164,10 @@ describe("dashboard", () => {
       "href",
       `/findings/${finding.id}`,
     );
+    expect(screen.getByRole("link", { name: "Critical signal" })).toHaveAttribute(
+      "href",
+      "/findings/77777777-7777-4777-8777-777777777777",
+    );
     expect(screen.queryByText("Low signal")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Acme" })).toHaveAttribute(
       "href",
@@ -170,6 +180,10 @@ describe("dashboard", () => {
       `/briefs/${brief.id}`,
     );
     expect(screen.getByText("1 of 10 competitor slots used")).toBeInTheDocument();
+    expect(apiGetClient).toHaveBeenCalledWith(
+      "/api/v1/findings?significance=critical&limit=5",
+      expect.anything(),
+    );
     expect(apiGetClient).toHaveBeenCalledWith(
       "/api/v1/findings?significance=high&limit=5",
       expect.anything(),
