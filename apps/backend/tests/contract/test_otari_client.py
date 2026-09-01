@@ -39,6 +39,7 @@ async def test_structured_completion_sends_hosted_contract_and_parses_usage() ->
         assert body["model"] == "competitor-scout-main"
         assert body["session_label"] == "run:synthetic-001"
         assert body["max_completion_tokens"] == 2048
+        assert body["reasoning_effort"] == "none"
         assert body["parallel_tool_calls"] is False
         assert body["max_tool_iterations"] == 3
         assert body["tools"] == [{"type": "otari_web_search"}]
@@ -87,6 +88,7 @@ async def test_omits_optional_tool_when_web_search_is_disabled() -> None:
         assert request.headers["authorization"] == "Bearer hosted-ai-token"
         body = json.loads((await request.aread()).decode())
         assert "tools" not in body
+        assert "reasoning_effort" not in body
         assert "parallel_tool_calls" not in body
         assert "max_tool_iterations" not in body
         return httpx.Response(200, content=fixture_bytes())

@@ -62,7 +62,7 @@ def test_otari_models_use_suffix_free_environment_names(monkeypatch: pytest.Monk
 def test_cost_limits_use_decimal_values() -> None:
     settings = Settings(**valid_values())
 
-    assert settings.max_run_cost_usd == Decimal("1.00")
+    assert settings.max_run_cost_usd == Decimal("2.25")
     assert settings.max_user_daily_cost_usd == Decimal("5.00")
     assert isinstance(settings.max_run_cost_usd, Decimal)
 

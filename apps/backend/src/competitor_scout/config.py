@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     max_synthesis_repairs: int = Field(default=1, ge=0, le=1)
     max_child_retries: int = Field(default=1, ge=0, le=1)
     max_otari_concurrency: int = Field(default=8, ge=1, le=100)
-    max_run_cost_usd: Decimal = Field(default=Decimal("1.00"), gt=0)
+    max_run_cost_usd: Decimal = Field(default=Decimal("2.25"), gt=0)
     max_user_daily_cost_usd: Decimal = Field(default=Decimal("5.00"), gt=0)
     estimated_main_request_cost_usd: Decimal = Field(default=Decimal("0.20"), gt=0)
     estimated_child_request_cost_usd: Decimal = Field(default=Decimal("0.10"), gt=0)

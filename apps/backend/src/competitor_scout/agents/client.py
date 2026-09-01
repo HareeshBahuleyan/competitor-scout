@@ -142,6 +142,10 @@ class OtariClient:
             },
         }
         if enable_web_search:
+            # Otari exposes managed web search as a function tool. The configured
+            # OpenAI GPT-5.6 models reject function tools on /v1/chat/completions
+            # unless reasoning_effort is explicitly "none".
+            body["reasoning_effort"] = "none"
             body["parallel_tool_calls"] = False
             body["max_tool_iterations"] = effective_tool_iterations
             body["tools"] = [{"type": "otari_web_search"}]
