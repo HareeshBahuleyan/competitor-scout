@@ -1,0 +1,4 @@
+interface:
+  display_name: "Update Repository Docs"
+  short_description: "Keep project guidance aligned with code"
+  default_prompt: "Use $update-repo-docs to update the repository documentation affected by this change."

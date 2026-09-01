@@ -73,3 +73,11 @@ GitHub Actions repeats these checks and runs the backend, frontend, migration,
 build, dependency-review, and browser test suites for every pull request.
 
 See the [Railway deployment guide](docs/railway-deployment.md) for production topology, configuration, and smoke checks.
+
+## Project guidance
+
+- [Agent instructions](AGENTS.md)
+- [Architecture overview](docs/architecture/overview.md)
+- [Backend architecture](docs/architecture/backend.md)
+- [Scout agent runtime](docs/architecture/agent-runtime.md)
+- [Frontend design system](docs/frontend/design-system.md)

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Add UI Pattern"
+  short_description: "Add accessible, consistent frontend patterns"
+  default_prompt: "Use $add-ui-pattern to add a reusable UI pattern to Competitor Scout."
