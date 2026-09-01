@@ -16,7 +16,7 @@ describe("CompetitorForm", () => {
     fireEvent.submit(screen.getByRole("form", { name: "Competitor details" }));
 
     expect(screen.getByText("Competitor name is required.")).toBeVisible();
-    expect(screen.getByText("Enter a valid domain.")).toBeVisible();
+    expect(screen.getByText("Enter a valid domain or website URL.")).toBeVisible();
     expect(screen.getByLabelText("Competitor name")).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByLabelText("Primary domain")).toHaveAttribute("aria-invalid", "true");
     expect(onSubmit).not.toHaveBeenCalled();
@@ -47,6 +47,23 @@ describe("CompetitorForm", () => {
       description: "Product analytics platform.",
       daily_run_time_local: "09:30:00",
     });
+  });
+
+  it("accepts a website URL and submits its normalized hostname", () => {
+    const onSubmit = vi.fn();
+    render(<CompetitorForm onSubmit={onSubmit} />);
+
+    fireEvent.change(screen.getByLabelText("Competitor name"), {
+      target: { value: "Portkey AI" },
+    });
+    fireEvent.change(screen.getByLabelText("Primary domain"), {
+      target: { value: "https://portkey.ai" },
+    });
+    fireEvent.submit(screen.getByRole("form", { name: "Competitor details" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ primary_domain: "portkey.ai" }),
+    );
   });
 
   it("disables every control and exposes pending text while submitting", () => {

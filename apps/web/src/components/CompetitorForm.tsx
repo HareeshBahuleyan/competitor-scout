@@ -20,6 +20,22 @@ type FormErrors = Partial<Record<"name" | "primary_domain", string>>;
 const domainPattern =
   /^(?=.{3,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
 
+function normalizePrimaryDomain(value: string): string | null {
+  const stripped = value.trim();
+  if (!stripped) return null;
+
+  try {
+    const url = new URL(stripped.includes("://") ? stripped : `https://${stripped}`);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.port) {
+      return null;
+    }
+    const hostname = url.hostname.replace(/\.$/, "").toLowerCase();
+    return domainPattern.test(hostname) ? hostname : null;
+  } catch {
+    return null;
+  }
+}
+
 export function CompetitorForm({
   initialValues,
   isSubmitting = false,
@@ -37,16 +53,16 @@ export function CompetitorForm({
     event.preventDefault();
 
     const name = values.name.trim();
-    const primaryDomain = values.primary_domain.trim().toLowerCase();
+    const primaryDomain = normalizePrimaryDomain(values.primary_domain);
     const nextErrors: FormErrors = {};
     if (!name) {
       nextErrors.name = "Competitor name is required.";
     }
-    if (!domainPattern.test(primaryDomain)) {
-      nextErrors.primary_domain = "Enter a valid domain.";
+    if (primaryDomain === null) {
+      nextErrors.primary_domain = "Enter a valid domain or website URL.";
     }
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) {
+    if (Object.keys(nextErrors).length > 0 || primaryDomain === null) {
       return;
     }
 
@@ -95,7 +111,8 @@ export function CompetitorForm({
           disabled={isSubmitting}
           id="primary-domain"
           inputMode="url"
-          maxLength={253}
+          maxLength={2048}
+          placeholder="example.com or https://example.com"
           name="primary_domain"
           onChange={(event) => setValues({ ...values, primary_domain: event.target.value })}
           spellCheck={false}
