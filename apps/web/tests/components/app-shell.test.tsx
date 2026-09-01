@@ -6,6 +6,9 @@ import { AppShell } from "@/components/AppShell";
 const navigationMocks = vi.hoisted(() => ({ usePathname: vi.fn(() => "/findings/example") }));
 
 vi.mock("next/navigation", () => navigationMocks);
+vi.mock("@/components/LogoutButton", () => ({
+  LogoutButton: () => <button type="button">Log out</button>,
+}));
 
 const expectedNavigation = [
   ["Dashboard", "/"],
@@ -49,5 +52,7 @@ describe("AppShell", () => {
       "href",
       "/competitors/new",
     );
+    expect(screen.getAllByRole("button", { name: "Log out" })).toHaveLength(2);
+    expect(screen.getByText("Competitor Scout")).not.toHaveClass("truncate");
   });
 });
