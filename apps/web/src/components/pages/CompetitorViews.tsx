@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { CompetitorForm, type CompetitorFormValues } from "@/components/CompetitorForm";
 import { FindingCard } from "@/components/FindingCard";
@@ -24,13 +24,12 @@ import {
 } from "@/lib/schemas";
 
 function errorText(error: unknown) {
-  if (
-    typeof error === "object" &&
-    error &&
-    "status" in error &&
-    (error.status === 409 || error.status === 422)
-  ) {
-    return "Competitor limit reached. Remove a competitor before adding another.";
+  if (typeof error === "object" && error && "detail" in error) {
+    const detail = error.detail;
+    if (detail === "competitor limit reached") {
+      return "Competitor limit reached. Remove a competitor before adding another.";
+    }
+    if (typeof detail === "string" && detail) return detail;
   }
   return error instanceof Error ? error.message : "Something went wrong.";
 }
@@ -289,6 +288,7 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
   const client = useQueryClient();
   const [pendingSourceId, setPendingSourceId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [discoveryRunId, setDiscoveryRunId] = useState<string | null>(null);
   const me = useQuery({ queryKey: ["me"], queryFn: () => apiGetClient("/api/v1/me", meSchema) });
   const competitor = useQuery({
     queryKey: ["competitor", competitorId],
@@ -307,6 +307,40 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
     queryKey: ["competitor-runs", competitorId],
     queryFn: () => apiGetClient(`/api/v1/runs?competitor_id=${competitorId}`, runPageSchema),
   });
+  const discovery = useMutation({
+    mutationFn: async () => {
+      if (!me.data) throw new Error("Account information is unavailable.");
+      const result = await apiMutate(
+        `/api/v1/competitors/${competitorId}/discover-sources`,
+        { csrfToken: me.data.csrf_token, method: "POST" },
+        sourceDiscoveryResponseSchema,
+      );
+      if (!result) throw new Error("The discovery response was empty.");
+      return result;
+    },
+    onSuccess: (result) => {
+      setNotice("Source discovery queued.");
+      setDiscoveryRunId(result.run_id);
+    },
+  });
+  const discoveryRun = useQuery({
+    enabled: Boolean(discoveryRunId),
+    queryKey: ["run", discoveryRunId],
+    queryFn: () => apiGetClient(`/api/v1/runs/${discoveryRunId}`, runSchema),
+    refetchInterval: (query) =>
+      terminalStatuses.has(query.state.data?.status ?? "") ? false : 1_000,
+  });
+  const discoveryFinished = terminalStatuses.has(discoveryRun.data?.status ?? "");
+  const discoveryNotice = discoveryFinished
+    ? discoveryRun.data?.status === "failed"
+      ? discoveryRun.data.failure_summary || "Source discovery failed."
+      : "Source discovery completed."
+    : null;
+  useEffect(() => {
+    if (!discoveryRunId || !discoveryFinished) return;
+    void client.invalidateQueries({ queryKey: ["competitor-sources", competitorId] });
+    void client.invalidateQueries({ queryKey: ["competitor-runs", competitorId] });
+  }, [client, competitorId, discoveryFinished, discoveryRunId]);
   const sourceUpdate = useMutation({
     mutationFn: async ({
       sourceId,
@@ -401,7 +435,7 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
         <div className="flex flex-wrap gap-2">
           <button
             className="rounded-lg border border-slate-300 px-4 py-2 font-medium disabled:text-slate-400"
-            disabled={runNow.isPending}
+            disabled={!hasApproved || competitor.data.status !== "active" || runNow.isPending}
             onClick={() => runNow.mutate()}
             type="button"
           >
@@ -417,10 +451,10 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
           </button>
         </div>
       </header>
-      {notice ? <p role="status">{notice}</p> : null}
-      {sourceUpdate.isError || activate.isError || runNow.isError ? (
+      {discoveryNotice || notice ? <p role="status">{discoveryNotice || notice}</p> : null}
+      {sourceUpdate.isError || activate.isError || runNow.isError || discovery.isError ? (
         <p className="text-red-700" role="alert">
-          {errorText(sourceUpdate.error ?? activate.error ?? runNow.error)}
+          {errorText(sourceUpdate.error ?? activate.error ?? runNow.error ?? discovery.error)}
         </p>
       ) : null}
       {sources.data.items.length ? (
@@ -433,7 +467,17 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
           sources={sources.data.items}
         />
       ) : (
-        <p>No sources have been discovered.</p>
+        <div className="space-y-3">
+          <p>No sources have been discovered.</p>
+          <button
+            className="rounded-lg border border-slate-300 px-4 py-2 font-medium disabled:text-slate-400"
+            disabled={discovery.isPending || (Boolean(discoveryRunId) && !discoveryFinished)}
+            onClick={() => discovery.mutate()}
+            type="button"
+          >
+            Retry source discovery
+          </button>
+        </div>
       )}
       <section className="space-y-4" aria-labelledby="recent-findings-heading">
         <div className="flex flex-wrap items-center justify-between gap-3">

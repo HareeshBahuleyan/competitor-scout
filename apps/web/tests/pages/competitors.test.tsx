@@ -85,6 +85,20 @@ describe("competitor pages", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("network unavailable");
   });
 
+  it("does not mislabel non-capacity API errors as competitor limits", async () => {
+    vi.mocked(apiGetClient).mockRejectedValueOnce(
+      Object.assign(new Error("invalid cursor"), {
+        detail: "invalid cursor",
+        status: 422,
+      }),
+    );
+
+    renderWithQuery(<CompetitorsListView />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("invalid cursor");
+    expect(screen.getByRole("alert")).not.toHaveTextContent("Competitor limit reached");
+  });
+
   it("creates a competitor, starts discovery, polls, and shows discovered sources", async () => {
     vi.mocked(apiGetClient).mockImplementation(async (path) => {
       if (path === "/api/v1/me") return me as never;
@@ -184,6 +198,43 @@ describe("competitor pages", () => {
     expect(vi.mocked(apiGetClient).mock.calls.some(([path]) => path.includes("/sources"))).toBe(
       false,
     );
+  });
+
+  it("retries failed source discovery from the competitor detail page", async () => {
+    let sourceRequests = 0;
+    vi.mocked(apiGetClient).mockImplementation(async (path) => {
+      if (path === "/api/v1/me") return me as never;
+      if (path === `/api/v1/competitors/${competitor.id}`) return competitor as never;
+      if (path === `/api/v1/competitors/${competitor.id}/sources`) {
+        sourceRequests += 1;
+        return {
+          items: sourceRequests === 1 ? [] : [source],
+          next_cursor: null,
+        } as never;
+      }
+      if (path.startsWith("/api/v1/findings?")) return { items: [], next_cursor: null } as never;
+      if (path.startsWith("/api/v1/runs?")) {
+        return { items: [run("failed", "Source discovery failed.")], next_cursor: null } as never;
+      }
+      if (path === `/api/v1/runs/${run("completed").id}`) return run("completed") as never;
+      throw new Error(`unexpected GET ${path}`);
+    });
+    vi.mocked(apiMutate).mockResolvedValueOnce({ run_id: run("completed").id } as never);
+
+    renderWithQuery(<CompetitorDetailView competitorId={competitor.id} />);
+    await screen.findByRole("heading", { name: "Acme" });
+    expect(screen.getByRole("button", { name: "Run now" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Retry source discovery" }));
+
+    await waitFor(() =>
+      expect(apiMutate).toHaveBeenCalledWith(
+        `/api/v1/competitors/${competitor.id}/discover-sources`,
+        expect.objectContaining({ csrfToken: "csrf", method: "POST" }),
+        expect.anything(),
+      ),
+    );
+    expect(await screen.findByText("Source discovery completed.")).toBeInTheDocument();
+    expect(await screen.findByText("Pricing")).toBeInTheDocument();
   });
 
   it("approves sources and activates monitoring with the authenticated CSRF token", async () => {
