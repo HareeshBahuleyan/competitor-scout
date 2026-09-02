@@ -57,7 +57,7 @@ export function DashboardView() {
   });
   useEffect(() => {
     if (competitors.data?.items.length === 0) {
-      router.replace("/competitors/new");
+      router.replace("/competitors/new?first=1");
     }
   }, [competitors.data?.items.length, router]);
 

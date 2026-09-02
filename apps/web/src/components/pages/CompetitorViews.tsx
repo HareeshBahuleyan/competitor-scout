@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { CompetitorForm, type CompetitorFormValues } from "@/components/CompetitorForm";
@@ -10,6 +11,7 @@ import { SetupStepper } from "@/components/SetupStepper";
 import { SourceApprovalList } from "@/components/SourceApprovalList";
 import { SourceSelectionList } from "@/components/SourceSelectionList";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { WorkingIndicator } from "@/components/ui/WorkingIndicator";
 import { apiGetClient, apiMutate } from "@/lib/api";
 import {
   competitorPageSchema,
@@ -101,9 +103,28 @@ export function CompetitorsListView() {
 
 type NewCompetitorViewProps = { pollIntervalMs?: number };
 const terminalStatuses = new Set(["completed", "partial", "failed"]);
+const discoveryMessages = [
+  "Casing the joint for official pages…",
+  "Reading their pricing page so you don't have to…",
+  "Digging through the changelog…",
+  "Sniffing out the blog feed…",
+  "Checking whether the roadmap is public…",
+  "Skipping the marketing fluff…",
+  "Double-checking every URL is first-party…",
+];
+const firstScanMessages = [
+  "Fetching the sources you approved…",
+  "Comparing today against yesterday…",
+  "Ignoring cosmetic copy tweaks…",
+  "Deciding what actually matters…",
+  "Collecting evidence for every claim…",
+  "Almost there — writing up the findings…",
+];
 
 export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewProps) {
   const client = useQueryClient();
+  const searchParams = useSearchParams();
+  const isFirstSetup = searchParams?.get("first") === "1";
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [created, setCreated] = useState<Competitor | null>(null);
   const [discoveryRunId, setDiscoveryRunId] = useState<string | null>(null);
@@ -255,10 +276,14 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
   return (
     <section className="space-y-8">
       <div>
-        <p className="eyebrow">New monitor</p>
-        <h1 className="mt-1 text-4xl font-semibold">Add competitor</h1>
+        <p className="eyebrow">{isFirstSetup ? "Welcome" : "New monitor"}</p>
+        <h1 className="mt-1 text-4xl font-semibold">
+          {isFirstSetup ? "Let's set up your first competitor in 3 steps" : "Add competitor"}
+        </h1>
         <p className="mt-2 text-slate-600">
-          Choose a competitor, confirm trusted sources, and run an initial scan.
+          {isFirstSetup
+            ? "Tell us who to watch, confirm the sources we should trust, and we'll run the first scan for you. Takes about two minutes."
+            : "Choose a competitor, confirm trusted sources, and run an initial scan."}
         </p>
       </div>
       <SetupStepper currentStep={step} />
@@ -285,8 +310,13 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
               We only monitor first-party pages you select. You can change these later.
             </p>
           </div>
-          {discovery.isPending || (discoveryRunId && discoveryRun.isPending) ? (
-            <LoadingState label="Finding first-party sources…" rows={2} />
+          {discovery.isPending ||
+          (discoveryRunId && !terminalStatuses.has(discoveryRun.data?.status ?? "")) ? (
+            <WorkingIndicator
+              hint="This usually takes under a minute"
+              label="Finding first-party sources…"
+              messages={discoveryMessages}
+            />
           ) : null}
           {discovery.isError ? (
             <div className="space-y-3 text-red-700" role="alert">
@@ -379,11 +409,12 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
       {step === 3 ? (
         <div className="surface max-w-2xl space-y-4 p-6">
           <h2 className="text-2xl font-semibold">Your monitor is active</h2>
-          {firstScan.isPending ? <LoadingState label="Running the first scan…" rows={3} /> : null}
-          {firstScan.data && !terminalStatuses.has(firstScan.data.status) ? (
-            <p role="status" className="capitalize">
-              First scan: {firstScan.data.status}…
-            </p>
+          {firstScanRunId && !terminalStatuses.has(firstScan.data?.status ?? "") ? (
+            <WorkingIndicator
+              hint="You can leave this page — the scan keeps running"
+              label="Running the first scan…"
+              messages={firstScanMessages}
+            />
           ) : null}
           {firstScan.data?.status === "completed" || firstScan.data?.status === "partial" ? (
             <p role="status">First scan complete.</p>

@@ -10,6 +10,8 @@ import { apiGetClient, apiMutate } from "@/lib/api";
 import { renderWithQuery } from "../query-test-utils";
 
 vi.mock("@/lib/api", () => ({ apiGetClient: vi.fn(), apiMutate: vi.fn() }));
+const searchParams = { current: new URLSearchParams() };
+vi.mock("next/navigation", () => ({ useSearchParams: () => searchParams.current }));
 
 const competitor = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -62,7 +64,10 @@ const run = (status: string, failure_summary: string | null = null) => ({
   created_at: "2026-08-21T08:00:00Z",
 });
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  searchParams.current = new URLSearchParams();
+});
 
 describe("competitor pages", () => {
   it("renders loading, empty, success, and error list states", async () => {
@@ -102,6 +107,48 @@ describe("competitor pages", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("invalid cursor");
     expect(screen.getByRole("alert")).not.toHaveTextContent("Competitor limit reached");
+  });
+
+  it("frames the first run as a three-step setup and shows background progress", async () => {
+    searchParams.current = new URLSearchParams("first=1");
+    vi.mocked(apiGetClient).mockImplementation(async (path) => {
+      if (path === "/api/v1/me") return me as never;
+      if (path === "/api/v1/settings") return settings as never;
+      if (path.includes("/runs/")) return run("running") as never;
+      throw new Error(`unexpected GET ${path}`);
+    });
+    vi.mocked(apiMutate)
+      .mockResolvedValueOnce(competitor as never)
+      .mockResolvedValueOnce({ run_id: run("running").id } as never);
+
+    renderWithQuery(<NewCompetitorView pollIntervalMs={50} />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Let's set up your first competitor in 3 steps",
+      }),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Competitor name"), { target: { value: "Acme" } });
+    fireEvent.change(screen.getByLabelText("Primary domain"), {
+      target: { value: "acme.example" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue to sources" }));
+
+    const progress = await screen.findByTestId("working-indicator");
+    expect(progress).toHaveTextContent("Finding first-party sources…");
+    expect(progress).toHaveTextContent("This usually takes under a minute");
+  });
+
+  it("keeps the standard header when adding a later competitor", async () => {
+    vi.mocked(apiGetClient).mockImplementation(async (path) => {
+      if (path === "/api/v1/me") return me as never;
+      if (path === "/api/v1/settings") return settings as never;
+      throw new Error(`unexpected GET ${path}`);
+    });
+
+    renderWithQuery(<NewCompetitorView pollIntervalMs={50} />);
+
+    expect(await screen.findByRole("heading", { name: "Add competitor" })).toBeInTheDocument();
   });
 
   it("guides setup from details through source selection and the first scan", async () => {

@@ -122,7 +122,10 @@ test("guides a new user through sources and the first scan", async ({ page }) =>
     }),
   );
 
-  await page.goto("/competitors/new");
+  await page.goto("/competitors/new?first=1");
+  await expect(
+    page.getByRole("heading", { name: "Let's set up your first competitor in 3 steps" }),
+  ).toBeVisible();
   await expect(page.getByLabel("Daily run time")).toHaveValue("06:45");
   await page.getByLabel("Competitor name").fill("Acme");
   await page.getByLabel("Primary domain").fill("acme.example");

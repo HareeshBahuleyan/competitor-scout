@@ -208,7 +208,7 @@ describe("dashboard", () => {
 
     mockDashboard({ competitors: [], findings: [], runs: [], briefs: [] });
     const empty = renderWithQuery(<DashboardView />);
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/competitors/new"));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/competitors/new?first=1"));
     expect(screen.getByText("Taking you to guided setup…")).toBeInTheDocument();
     empty.unmount();
 
