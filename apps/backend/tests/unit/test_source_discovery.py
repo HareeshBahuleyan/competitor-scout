@@ -218,6 +218,9 @@ async def test_discovery_uses_exact_hosted_tool_contract_and_filters_sources() -
         assert body["max_tool_iterations"] == 11
         assert "Make no more than 8 web search calls." in body["messages"][0]["content"]
         assert body["session_label"] == f"scout-run:{run_id}"
+        assert body["response_format"]["type"] == "json_schema"
+        assert body["response_format"]["json_schema"]["strict"] is True
+        assert request.extensions["timeout"]["read"] == 60.0
         return httpx.Response(
             200,
             json={

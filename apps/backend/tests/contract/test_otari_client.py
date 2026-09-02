@@ -94,6 +94,17 @@ async def test_omits_optional_tool_when_web_search_is_disabled() -> None:
         assert "reasoning_effort" not in body
         assert "parallel_tool_calls" not in body
         assert "max_tool_iterations" not in body
+        assert body["response_format"]["type"] == "json_schema"
+        assert body["response_format"]["json_schema"]["strict"] is True
+        schema = body["response_format"]["json_schema"]["schema"]
+        assert schema["additionalProperties"] is False
+        planned_task_schema = schema["$defs"]["PlannedChildTask"]
+        source_url_schema = planned_task_schema["properties"]["source_urls"]["items"]
+        assert "format" not in source_url_schema
+        assert set(planned_task_schema["required"]) == set(planned_task_schema["properties"])
+        serialized_schema = json.dumps(schema)
+        for keyword in ("default", "format"):
+            assert f'"{keyword}"' not in serialized_schema
         return httpx.Response(200, content=fixture_bytes())
 
     async with OtariClient(settings(), transport=httpx.MockTransport(handler)) as client:
@@ -119,7 +130,11 @@ async def test_mcp_server_ids_are_sent_as_top_level_field_not_a_tool() -> None:
         assert body["reasoning_effort"] == "none"
         assert body["parallel_tool_calls"] is False
         assert body["max_tool_iterations"] == 4
-        return httpx.Response(200, content=fixture_bytes())
+        assert "response_format" not in body
+        document = json.loads(fixture_bytes())
+        content = document["choices"][0]["message"]["content"]
+        document["choices"][0]["message"]["content"] = f"```json\n{content}\n```"
+        return httpx.Response(200, json=document)
 
     async with OtariClient(settings(), transport=httpx.MockTransport(handler)) as client:
         await client.structured_completion(

@@ -146,19 +146,24 @@ class OtariClient:
             "messages": messages,
             "session_label": session_label,
             "max_completion_tokens": max_completion_tokens,
-            "response_format": {
+        }
+        if not mcp_server_ids:
+            body["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
                     "name": output_type.__name__,
                     "strict": True,
                     "schema": hosted_json_schema(output_type),
                 },
-            },
-        }
+            }
         if has_tool:
             # Otari exposes managed web search and workspace MCP tools as function
             # tools. The configured OpenAI GPT-5.6 models reject function tools on
             # /v1/chat/completions unless reasoning_effort is explicitly "none".
+            # MCP-backed requests skip function calls when strict response_format is
+            # present, so only MCP output is prompted as JSON and validated locally.
+            # Otari's built-in web search retains strict provider-side output, which
+            # keeps its terminal response bounded and schema-valid.
             body["reasoning_effort"] = "none"
             body["parallel_tool_calls"] = False
             body["max_tool_iterations"] = effective_tool_iterations
@@ -361,6 +366,11 @@ class OtariClient:
             raise OtariError("otari_invalid_response", retryable=False) from None
         if not isinstance(content, str):
             raise OtariError("otari_invalid_response", retryable=False)
+        stripped = content.strip()
+        if stripped.startswith("```json\n") and stripped.endswith("\n```"):
+            return stripped.removeprefix("```json\n").removesuffix("\n```").strip()
+        if stripped.startswith("```\n") and stripped.endswith("\n```"):
+            return stripped.removeprefix("```\n").removesuffix("\n```").strip()
         return content
 
     @classmethod

@@ -94,6 +94,24 @@ def test_planning_prompt_explains_task_scope_invariants() -> None:
     assert "max_search_calls to at least 1" in system
 
 
+def test_child_prompt_distinguishes_mcp_from_builtin_tool_output() -> None:
+    firecrawl = child_messages(
+        {"source_urls": ["https://competitor.example/pricing"]},
+        tool_name="firecrawl",
+    )[0]["content"]
+    web_search = child_messages(
+        {"search_query": "Example Analytics pricing"},
+        tool_name="otari_web_search",
+    )[0]["content"]
+
+    assert "MUST invoke an available Firecrawl MCP scrape or fetch tool" in firecrawl
+    assert "never answer from memory or search snippets" in firecrawl
+    assert "only after Firecrawl successfully returns content" in firecrawl
+    assert "raw JSON only, without Markdown fences or commentary" in firecrawl
+    assert "otari_web_search tool is allowed only within the task and search budget" in web_search
+    assert "raw JSON only" not in web_search
+
+
 def test_planning_and_synthesis_prompts_share_complete_category_guidance() -> None:
     assert set(FINDING_CATEGORY_DEFINITIONS) == set(FindingCategory)
     for category, definition in FINDING_CATEGORY_DEFINITIONS.items():
