@@ -24,11 +24,14 @@ from competitor_scout.models.intelligence import (
     AgentTask,
     AgentTaskRole,
     AgentTaskStatus,
+    ApprovalStatus,
     Competitor,
     CompetitorStatus,
     EvidenceItem,
+    EvidenceObservation,
     Finding,
     FindingEvidence,
+    MonitoredSource,
     RunType,
     ScoutRun,
     ScoutRunStatus,
@@ -40,6 +43,7 @@ from competitor_scout.schemas.briefs import (
     EMPTY_BRIEF_TITLE,
     WeeklyBriefResult,
 )
+from competitor_scout.services.briefs import digest_overview, next_weekly_generation
 
 SCHEDULED = datetime(2026, 10, 25, 23, 0, tzinfo=UTC)  # Monday midnight in Berlin.
 
@@ -51,6 +55,18 @@ def test_weekly_period_uses_exact_local_midnight_boundaries_across_dst() -> None
     assert period.period_end == date(2026, 10, 25)
     assert period.start_utc == datetime(2026, 10, 18, 22, 0, tzinfo=UTC)
     assert period.end_exclusive_utc == datetime(2026, 10, 25, 23, 0, tzinfo=UTC)
+
+
+def test_next_weekly_generation_uses_the_users_local_schedule() -> None:
+    before_due = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
+    after_due = datetime(2026, 10, 26, 7, 1, tzinfo=UTC)
+
+    assert next_weekly_generation(before_due, "Europe/Berlin") == datetime(
+        2026, 10, 26, 7, 0, tzinfo=UTC
+    )
+    assert next_weekly_generation(after_due, "Europe/Berlin") == datetime(
+        2026, 11, 2, 7, 0, tzinfo=UTC
+    )
 
 
 @pytest.mark.parametrize("qualifying_run_type", [RunType.DAILY_SCOUT, RunType.MANUAL_SCOUT])
@@ -210,6 +226,7 @@ async def brief_store(migrated_database_url: str):
 @dataclass(frozen=True)
 class SeededBriefRun:
     user_id: uuid.UUID
+    competitor_id: uuid.UUID
     run_id: uuid.UUID
     finding_ids: tuple[uuid.UUID, ...]
 
@@ -237,7 +254,7 @@ async def seed_brief_run(
             competitor=competitor,
             run_type=RunType.DAILY_SCOUT,
             status=ScoutRunStatus.COMPLETED,
-            scheduled_for=SCHEDULED.replace(day=18),
+            scheduled_for=datetime(2026, 10, 20, 12, 0, tzinfo=UTC),
         )
         task = AgentTask(
             scout_run=source_run,
@@ -255,6 +272,30 @@ async def seed_brief_run(
         )
         session.add_all([task, weekly_run])
         await session.flush()
+        coverage_evidence = EvidenceItem(
+            user=user,
+            competitor=competitor,
+            scout_run=source_run,
+            agent_task=task,
+            source_url=f"https://{stem}.example/",
+            source_domain=f"{stem}.example",
+            source_title="Homepage",
+            source_type="first_party",
+            published_at=None,
+            captured_at=datetime(2026, 10, 20, 12, 5, tzinfo=UTC),
+            quoted_text="This is a sufficiently long homepage quotation used for coverage.",
+            normalized_claim="homepage reviewed",
+            content_fingerprint=f"{999:064x}",
+        )
+        session.add(coverage_evidence)
+        await session.flush()
+        session.add(
+            EvidenceObservation(
+                scout_run_id=source_run.id,
+                evidence_item_id=coverage_evidence.id,
+                agent_task_id=task.id,
+            )
+        )
         finding_ids: list[uuid.UUID] = []
         for index, published_at in enumerate(published_times):
             finding = Finding(
@@ -300,7 +341,7 @@ async def seed_brief_run(
             )
             await session.flush()
             finding_ids.append(finding.id)
-        return SeededBriefRun(user.id, weekly_run.id, tuple(finding_ids))
+        return SeededBriefRun(user.id, competitor.id, weekly_run.id, tuple(finding_ids))
 
 
 def grounded_result(finding_ids: tuple[uuid.UUID, ...]) -> WeeklyBriefResult:
@@ -392,6 +433,19 @@ async def test_grounded_brief_uses_only_local_period_findings_and_is_idempotent(
         assert (brief.period_start, brief.period_end) == (date(2026, 10, 19), date(2026, 10, 25))
         assert run is not None and run.status is ScoutRunStatus.COMPLETED
         assert run.input_tokens == 120 and run.settled_cost_usd == Decimal("0.012345")
+        assert brief.coverage == {
+            "competitors": [
+                {
+                    "competitor_id": str(seeded.competitor_id),
+                    "competitor_name": "Acme",
+                }
+            ],
+            "completed_scan_count": 1,
+            "partial_scan_count": 0,
+            "failed_scan_count": 0,
+            "inspected_source_count": 1,
+            "coverage_complete": True,
+        }
         assert (
             await session.scalar(
                 select(func.count(AgentTask.id)).where(AgentTask.scout_run_id == seeded.run_id)
@@ -544,6 +598,107 @@ async def test_paused_competitor_does_not_erase_published_period_findings(
     assert [item["id"] for item in payload["findings"]] == [str(seeded.finding_ids[0])]
 
 
+async def test_digest_overview_distinguishes_setup_scan_waiting_and_paused(
+    brief_store,
+) -> None:
+    now = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
+    async with brief_store.begin() as session:
+        stem = uuid.uuid4().hex
+        user = User(
+            email=f"overview-{stem}@example.com",
+            display_name="Overview Owner",
+            timezone="Europe/Berlin",
+        )
+        session.add(user)
+        await session.flush()
+        required = await digest_overview(
+            session,
+            user_id=user.id,
+            timezone_name=user.timezone,
+            now=now,
+        )
+        competitor = Competitor(
+            user=user,
+            name="Overview competitor",
+            primary_domain=f"overview-{stem}.example",
+            status=CompetitorStatus.DISCOVERING,
+        )
+        session.add(competitor)
+        await session.flush()
+        incomplete = await digest_overview(
+            session,
+            user_id=user.id,
+            timezone_name=user.timezone,
+            now=now,
+        )
+        competitor.status = CompetitorStatus.ACTIVE
+        session.add(
+            MonitoredSource(
+                competitor=competitor,
+                url=f"https://overview-{stem}.example/",
+                normalized_url=f"https://overview-{stem}.example/",
+                source_category="homepage",
+                title="Homepage",
+                discovery_reason="Primary first-party source",
+                approval_status=ApprovalStatus.APPROVED,
+            )
+        )
+        await session.flush()
+        awaiting = await digest_overview(
+            session,
+            user_id=user.id,
+            timezone_name=user.timezone,
+            now=now,
+        )
+        competitor.starting_snapshot_requested_at = now
+        run = ScoutRun(
+            user=user,
+            competitor=competitor,
+            run_type=RunType.DAILY_SCOUT,
+            status=ScoutRunStatus.QUEUED,
+            scheduled_for=now,
+        )
+        session.add(run)
+        await session.flush()
+        running = await digest_overview(
+            session,
+            user_id=user.id,
+            timezone_name=user.timezone,
+            now=now,
+        )
+        run.status = ScoutRunStatus.FAILED
+        await session.flush()
+        failed_active = await digest_overview(
+            session,
+            user_id=user.id,
+            timezone_name=user.timezone,
+            now=now,
+        )
+        competitor.status = CompetitorStatus.PAUSED
+        await session.flush()
+        paused = await digest_overview(
+            session,
+            user_id=user.id,
+            timezone_name=user.timezone,
+            now=now,
+        )
+
+    assert required.state == "setup_required"
+    assert required.next_digest_at is None
+    assert incomplete.state == "setup_incomplete"
+    assert incomplete.incomplete_competitor is not None
+    assert incomplete.incomplete_competitor.competitor_id == competitor.id
+    assert awaiting.state == "awaiting_first_digest"
+    assert awaiting.approved_source_count == 1
+    assert awaiting.next_digest_at == datetime(2026, 10, 26, 7, 0, tzinfo=UTC)
+    assert running.state == "initial_scan_running"
+    assert running.running_scan is not None and running.running_scan.run_id == run.id
+    assert failed_active.monitoring_issue_count == 1
+    assert paused.state == "setup_incomplete"
+    assert paused.next_digest_at is None
+    assert paused.monitoring_issue_count == 0
+
+
 async def test_empty_week_is_deterministic_and_never_calls_otari(brief_store) -> None:
     seeded = await seed_brief_run(brief_store, timezone="UTC")
     client = NeverOtari()
@@ -561,6 +716,19 @@ async def test_empty_week_is_deterministic_and_never_calls_otari(brief_store) ->
         assert brief.title == EMPTY_BRIEF_TITLE
         assert brief.executive_summary == EMPTY_BRIEF_EXECUTIVE_SUMMARY
         assert brief.sections == []
+        assert brief.coverage == {
+            "competitors": [
+                {
+                    "competitor_id": str(seeded.competitor_id),
+                    "competitor_name": "Acme",
+                }
+            ],
+            "completed_scan_count": 1,
+            "partial_scan_count": 0,
+            "failed_scan_count": 0,
+            "inspected_source_count": 1,
+            "coverage_complete": True,
+        }
         assert (
             await session.scalar(
                 select(func.count(AgentTask.id)).where(AgentTask.scout_run_id == seeded.run_id)
@@ -575,6 +743,65 @@ async def test_empty_week_is_deterministic_and_never_calls_otari(brief_store) ->
         )
 
 
+async def test_quiet_week_receipt_counts_completed_partial_failed_and_inspected_sources(
+    brief_store,
+) -> None:
+    seeded = await seed_brief_run(brief_store, timezone="UTC")
+    async with brief_store.begin() as session:
+        user = await session.get(User, seeded.user_id)
+        assert user is not None
+        statuses = (
+            ("Partial competitor", CompetitorStatus.ACTIVE, ScoutRunStatus.PARTIAL),
+            ("Failed competitor", CompetitorStatus.ACTIVE, ScoutRunStatus.FAILED),
+            ("Paused competitor", CompetitorStatus.PAUSED, None),
+        )
+        for index, (name, competitor_status, run_status) in enumerate(statuses):
+            competitor = Competitor(
+                user=user,
+                name=name,
+                primary_domain=f"coverage-{index}-{uuid.uuid4().hex}.example",
+                status=competitor_status,
+            )
+            session.add(competitor)
+            await session.flush()
+            if run_status is not None:
+                session.add(
+                    ScoutRun(
+                        user=user,
+                        competitor=competitor,
+                        run_type=RunType.DAILY_SCOUT,
+                        status=run_status,
+                        scheduled_for=datetime(2026, 10, 20, 13, 0, tzinfo=UTC),
+                    )
+                )
+
+    handler = WeeklyBriefHandler(
+        brief_store,
+        client=NeverOtari(),
+        settings=settings(),
+        now=lambda: SCHEDULED,
+    )
+    assert await handler.handle(seeded.run_id) is ScoutRunStatus.COMPLETED
+
+    async with brief_store() as session:
+        brief = await session.scalar(
+            select(WeeklyBrief).where(WeeklyBrief.user_id == seeded.user_id)
+        )
+        assert brief is not None
+        assert brief.coverage is not None
+        receipt = brief.coverage
+    assert {item["competitor_name"] for item in receipt["competitors"]} == {
+        "Acme",
+        "Partial competitor",
+        "Failed competitor",
+    }
+    assert receipt["completed_scan_count"] == 1
+    assert receipt["partial_scan_count"] == 1
+    assert receipt["failed_scan_count"] == 1
+    assert receipt["inspected_source_count"] == 1
+    assert receipt["coverage_complete"] is False
+
+
 async def test_brief_api_is_cursor_paginated_and_user_scoped(brief_store) -> None:
     owner = await seed_brief_run(brief_store, timezone="UTC")
     other = await seed_brief_run(brief_store, timezone="UTC")
@@ -587,10 +814,23 @@ async def test_brief_api_is_cursor_paginated_and_user_scoped(brief_store) -> Non
         ).handle(seeded.run_id)
     async with brief_store() as session:
         owner_user = await session.get(User, owner.user_id)
+        owner_brief = await session.scalar(
+            select(WeeklyBrief).where(WeeklyBrief.user_id == owner.user_id)
+        )
         other_brief = await session.scalar(
             select(WeeklyBrief).where(WeeklyBrief.user_id == other.user_id)
         )
-        assert owner_user is not None and other_brief is not None
+        assert owner_user is not None and owner_brief is not None and other_brief is not None
+        owner_brief.coverage = None
+        session.add(
+            Competitor(
+                user=owner_user,
+                name="New setup in progress",
+                primary_domain=f"new-setup-{uuid.uuid4().hex}.example",
+                status=CompetitorStatus.DISCOVERING,
+            )
+        )
+        await session.commit()
 
     async def current_owner() -> User:
         return owner_user
@@ -610,7 +850,13 @@ async def test_brief_api_is_cursor_paginated_and_user_scoped(brief_store) -> Non
         document = response.json()
         assert len(document["items"]) == 1
         assert document["items"][0]["id"] != str(other_brief.id)
+        assert document["items"][0]["coverage"] is None
         own_id = document["items"][0]["id"]
         assert (await client.get(f"/api/v1/briefs/{own_id}")).status_code == 200
+        overview = await client.get("/api/v1/briefs/overview")
+        assert overview.status_code == 200
+        assert overview.json()["state"] == "archive_available"
+        assert overview.json()["latest_brief"]["id"] == own_id
+        assert overview.json()["active_competitor_count"] == 1
         hidden = await client.get(f"/api/v1/briefs/{other_brief.id}")
         assert hidden.status_code == 404

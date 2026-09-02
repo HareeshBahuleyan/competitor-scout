@@ -252,6 +252,19 @@ describe("snapshot, brief, settings, and aggregate usage schemas", () => {
       scout_run_id: "44444444-4444-4444-8444-444444444444",
       period_start: "2026-08-10",
       period_end: "2026-08-16",
+      coverage: {
+        competitors: [
+          {
+            competitor_id: "11111111-1111-4111-8111-111111111111",
+            competitor_name: "Acme",
+          },
+        ],
+        completed_scan_count: 5,
+        partial_scan_count: 0,
+        failed_scan_count: 0,
+        inspected_source_count: 4,
+        coverage_complete: true,
+      },
       published_at: "2026-08-17T08:00:00Z",
       created_at: "2026-08-17T08:00:00Z",
     };
@@ -279,7 +292,7 @@ describe("snapshot, brief, settings, and aggregate usage schemas", () => {
     expect(
       weeklyBriefSchema.parse({
         ...base,
-        title: "Weekly Digest: no material changes",
+        title: "No important changes found this week",
         executive_summary: "No accepted material changes were published during this weekly period.",
         sections: [],
       }).sections,
@@ -290,6 +303,22 @@ describe("snapshot, brief, settings, and aggregate usage schemas", () => {
         title: "Nothing happened",
         executive_summary: "Trust me.",
         sections: [],
+      }),
+    ).toThrow(z.ZodError);
+    expect(
+      weeklyBriefSchema.parse({
+        ...grounded,
+        coverage: null,
+      }).coverage,
+    ).toBeNull();
+    expect(() =>
+      weeklyBriefSchema.parse({
+        ...grounded,
+        coverage: {
+          ...base.coverage,
+          partial_scan_count: 1,
+          coverage_complete: true,
+        },
       }),
     ).toThrow(z.ZodError);
   });

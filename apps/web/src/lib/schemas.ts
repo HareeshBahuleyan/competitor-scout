@@ -287,9 +287,42 @@ export const briefSectionSchema = z.object({
   references: z.array(briefFindingReferenceSchema).min(1).max(30),
 });
 
-export const EMPTY_BRIEF_TITLE = "Weekly Digest: no material changes";
+export const EMPTY_BRIEF_TITLE = "No important changes found this week";
 export const EMPTY_BRIEF_EXECUTIVE_SUMMARY =
   "No accepted material changes were published during this weekly period.";
+
+export const coveredCompetitorSchema = z.object({
+  competitor_id: z.string().uuid(),
+  competitor_name: z.string().min(1).max(200),
+});
+
+export const monitoringCoverageReceiptSchema = z
+  .object({
+    competitors: z.array(coveredCompetitorSchema).max(500),
+    completed_scan_count: z.number().int().nonnegative(),
+    partial_scan_count: z.number().int().nonnegative(),
+    failed_scan_count: z.number().int().nonnegative(),
+    inspected_source_count: z.number().int().nonnegative(),
+    coverage_complete: z.boolean(),
+  })
+  .superRefine((receipt, context) => {
+    const expectedComplete = receipt.partial_scan_count === 0 && receipt.failed_scan_count === 0;
+    if (receipt.coverage_complete !== expectedComplete) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Coverage completeness must match partial and failed scan counts.",
+        path: ["coverage_complete"],
+      });
+    }
+    const competitorIds = receipt.competitors.map((item) => item.competitor_id);
+    if (new Set(competitorIds).size !== competitorIds.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Coverage competitors must be distinct.",
+        path: ["competitors"],
+      });
+    }
+  });
 
 export const weeklyBriefSchema = z
   .object({
@@ -300,6 +333,7 @@ export const weeklyBriefSchema = z
     title: z.string().min(1).max(300),
     executive_summary: z.string().min(1).max(5_000),
     sections: z.array(briefSectionSchema).max(20),
+    coverage: monitoringCoverageReceiptSchema.nullable(),
     published_at: timestampSchema,
     created_at: timestampSchema,
   })
@@ -319,6 +353,46 @@ export const weeklyBriefSchema = z
 
 export type WeeklyBrief = z.infer<typeof weeklyBriefSchema>;
 export const weeklyBriefPageSchema = cursorPageSchema(weeklyBriefSchema);
+
+export const digestOverviewSchema = z.object({
+  state: z.enum([
+    "setup_required",
+    "setup_incomplete",
+    "initial_scan_running",
+    "awaiting_first_digest",
+    "archive_available",
+  ]),
+  next_digest_at: timestampSchema.nullable(),
+  active_competitor_count: z.number().int().nonnegative(),
+  approved_source_count: z.number().int().nonnegative(),
+  incomplete_competitor: z
+    .object({
+      competitor_id: z.string().uuid(),
+      competitor_name: z.string().min(1).max(200),
+      status: z.enum(["discovering", "paused"]),
+    })
+    .nullable(),
+  running_scan: z
+    .object({
+      run_id: z.string().uuid(),
+      competitor_id: z.string().uuid(),
+      competitor_name: z.string().min(1).max(200),
+      status: z.enum(["queued", "planning", "gathering", "synthesizing"]),
+    })
+    .nullable(),
+  snapshots: z
+    .array(
+      z.object({
+        snapshot_id: z.string().uuid(),
+        competitor_id: z.string().uuid(),
+        competitor_name: z.string().min(1).max(200),
+      }),
+    )
+    .max(500),
+  monitoring_issue_count: z.number().int().nonnegative(),
+  latest_brief: weeklyBriefSchema.nullable(),
+});
+export type DigestOverview = z.infer<typeof digestOverviewSchema>;
 
 export const settingsSchema = z.object({
   display_name: z.string().min(1).max(200),

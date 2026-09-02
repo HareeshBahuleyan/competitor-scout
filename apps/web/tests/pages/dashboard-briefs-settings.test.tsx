@@ -65,6 +65,19 @@ const brief = {
   period_end: "2026-08-16",
   title: "Weekly competitor brief",
   executive_summary: "Acme introduced an annual tier.",
+  coverage: {
+    competitors: [
+      {
+        competitor_id: competitor.id,
+        competitor_name: competitor.name,
+      },
+    ],
+    completed_scan_count: 5,
+    partial_scan_count: 0,
+    failed_scan_count: 0,
+    inspected_source_count: 4,
+    coverage_complete: true,
+  },
   published_at: "2026-08-17T08:00:00Z",
   created_at: "2026-08-17T08:00:00Z",
   sections: [
@@ -100,6 +113,36 @@ const usage = {
   ],
 };
 
+function digestOverview(briefs: unknown[] = [brief]) {
+  const latest = briefs[0] ?? null;
+  return {
+    state: latest ? "archive_available" : "awaiting_first_digest",
+    next_digest_at: "2026-08-24T06:00:00Z",
+    active_competitor_count: 1,
+    approved_source_count: 4,
+    incomplete_competitor: null,
+    running_scan: null,
+    snapshots: [
+      {
+        snapshot_id: "99999999-9999-4999-8999-999999999998",
+        competitor_id: competitor.id,
+        competitor_name: competitor.name,
+      },
+    ],
+    monitoring_issue_count: 0,
+    latest_brief: latest,
+  };
+}
+
+function mockBriefList(items: unknown[], overview: unknown = digestOverview(items)) {
+  vi.mocked(apiGetClient).mockImplementation(async (path) => {
+    if (path === "/api/v1/me") return me as never;
+    if (path === "/api/v1/briefs") return { items, next_cursor: null } as never;
+    if (path === "/api/v1/briefs/overview") return overview as never;
+    throw new Error(`Unexpected path ${path}`);
+  });
+}
+
 function mockDashboard(data?: {
   competitors?: unknown[];
   findings?: unknown[];
@@ -130,8 +173,7 @@ function mockDashboard(data?: {
     }
     if (path.startsWith("/api/v1/runs"))
       return { items: data?.runs ?? [run], next_cursor: null } as never;
-    if (path.startsWith("/api/v1/briefs"))
-      return { items: data?.briefs ?? [brief], next_cursor: null } as never;
+    if (path === "/api/v1/briefs/overview") return digestOverview(data?.briefs ?? [brief]) as never;
     throw new Error(`Unexpected path ${path}`);
   });
 }
@@ -201,6 +243,17 @@ describe("dashboard", () => {
     );
   });
 
+  it("shows digest readiness before the first edition exists", async () => {
+    mockDashboard({ briefs: [] });
+    renderWithQuery(<DashboardView />);
+
+    expect(await screen.findByText("Your first Weekly Digest is scheduled")).toBeInTheDocument();
+    expect(
+      screen.getByText(/monitoring 1 competitor across 4 approved sources/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No Weekly Digest yet.")).not.toBeInTheDocument();
+  });
+
   it("has explicit loading, empty, and error states", async () => {
     const pending = new Promise<never>(() => undefined);
     vi.mocked(apiGetClient).mockReturnValue(pending);
@@ -221,17 +274,80 @@ describe("dashboard", () => {
 });
 
 describe("weekly briefs", () => {
-  it("lists historical briefs and renders grounded references to finding evidence", async () => {
-    vi.mocked(apiGetClient).mockResolvedValueOnce({ items: [brief], next_cursor: null } as never);
+  it("renders setup-required, setup-incomplete, and first-scan-running states", async () => {
+    const baseOverview = {
+      ...digestOverview([]),
+      next_digest_at: null,
+      active_competitor_count: 0,
+      approved_source_count: 0,
+      snapshots: [],
+    };
+    mockBriefList([], { ...baseOverview, state: "setup_required" });
+    const required = renderWithQuery(<BriefsListView />);
+    expect(await screen.findByRole("link", { name: "Set up a competitor" })).toHaveAttribute(
+      "href",
+      "/competitors/new",
+    );
+    required.unmount();
+
+    mockBriefList([], {
+      ...baseOverview,
+      state: "setup_incomplete",
+      incomplete_competitor: {
+        competitor_id: competitor.id,
+        competitor_name: competitor.name,
+        status: "discovering",
+      },
+    });
+    const incomplete = renderWithQuery(<BriefsListView />);
+    expect(await screen.findByRole("link", { name: "Finish Acme setup" })).toHaveAttribute(
+      "href",
+      `/competitors/${competitor.id}`,
+    );
+    incomplete.unmount();
+
+    mockBriefList([], {
+      ...baseOverview,
+      state: "initial_scan_running",
+      active_competitor_count: 1,
+      running_scan: {
+        run_id: run.id,
+        competitor_id: competitor.id,
+        competitor_name: competitor.name,
+        status: "gathering",
+      },
+    });
+    renderWithQuery(<BriefsListView />);
+    expect(await screen.findByRole("link", { name: "View scan progress" })).toHaveAttribute(
+      "href",
+      `/runs/${run.id}`,
+    );
+  });
+
+  it("separates the current digest from archive history and renders grounded references", async () => {
+    const olderBrief = {
+      ...brief,
+      id: "77777777-7777-4777-8777-777777777777",
+      title: "Earlier pricing movement",
+      period_start: "2026-08-03",
+      period_end: "2026-08-09",
+      published_at: "2026-08-10T08:00:00Z",
+      created_at: "2026-08-10T08:00:00Z",
+    };
+    mockBriefList([brief, olderBrief]);
     const list = renderWithQuery(<BriefsListView />);
     expect(await screen.findByRole("link", { name: brief.title })).toHaveAttribute(
       "href",
       `/briefs/${brief.id}`,
     );
-    expect(screen.getByText(/Aug 10, 2026/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: olderBrief.title })).toHaveAttribute(
+      "href",
+      `/briefs/${olderBrief.id}`,
+    );
+    expect(screen.getByText(/Aug 3, 2026/)).toBeInTheDocument();
     list.unmount();
 
-    vi.mocked(apiGetClient).mockResolvedValueOnce(brief as never);
+    vi.mocked(apiGetClient).mockResolvedValue(brief as never);
     renderWithQuery(<BriefDetailView briefId={brief.id} />);
     expect(await screen.findByRole("heading", { name: "Pricing" })).toBeInTheDocument();
     expect(screen.getByText("The annual tier is now public.")).toBeInTheDocument();
@@ -239,14 +355,22 @@ describe("weekly briefs", () => {
       "href",
       `/findings/${finding.id}`,
     );
+    await userEvent.click(screen.getByText("Monitoring coverage"));
+    expect(screen.getByText("Completed scans")).toBeVisible();
   });
 
-  it("renders an honest empty week without fabricated references and exposes empty/error states", async () => {
-    vi.mocked(apiGetClient).mockResolvedValueOnce({
+  it("renders an honest quiet week and a readiness state instead of a false empty report", async () => {
+    vi.mocked(apiGetClient).mockResolvedValue({
       ...brief,
-      title: "Weekly Digest: no material changes",
+      title: "No important changes found this week",
       executive_summary: "No accepted material changes were published during this weekly period.",
       sections: [],
+      coverage: {
+        ...brief.coverage,
+        completed_scan_count: 4,
+        partial_scan_count: 1,
+        coverage_complete: false,
+      },
     } as never);
     const detail = renderWithQuery(<BriefDetailView briefId={brief.id} />);
     expect(
@@ -254,15 +378,25 @@ describe("weekly briefs", () => {
         "No accepted material changes were published during this weekly period.",
       ),
     ).toBeInTheDocument();
+    expect(screen.getByText(/monitoring result, not a missing report/i)).toBeInTheDocument();
+    expect(screen.getByText(/may not cover every monitored source/i)).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /finding and evidence/i })).not.toBeInTheDocument();
     detail.unmount();
 
-    vi.mocked(apiGetClient).mockResolvedValueOnce({ items: [], next_cursor: null } as never);
+    vi.mocked(apiGetClient).mockResolvedValue({ ...brief, coverage: null } as never);
+    const historical = renderWithQuery(<BriefDetailView briefId={brief.id} />);
+    expect(await screen.findByText(/not recorded for this historical digest/i)).toBeInTheDocument();
+    expect(screen.queryByText("Completed scans")).not.toBeInTheDocument();
+    historical.unmount();
+
+    mockBriefList([]);
     const empty = renderWithQuery(<BriefsListView />);
-    expect(await screen.findByText("No Weekly Digest yet.")).toBeInTheDocument();
+    expect(await screen.findByText("Your first Weekly Digest is scheduled")).toBeInTheDocument();
+    expect(screen.getByText(/archive will begin/i)).toBeInTheDocument();
+    expect(screen.queryByText("No Weekly Digest yet.")).not.toBeInTheDocument();
     empty.unmount();
 
-    vi.mocked(apiGetClient).mockRejectedValueOnce(new Error("briefs unavailable"));
+    vi.mocked(apiGetClient).mockRejectedValue(new Error("briefs unavailable"));
     renderWithQuery(<BriefsListView />);
     expect(await screen.findByRole("alert")).toHaveTextContent("briefs unavailable");
   });
