@@ -8,6 +8,8 @@ import { apiGetClient, apiMutate } from "@/lib/api";
 import { renderWithQuery } from "../query-test-utils";
 
 vi.mock("@/lib/api", () => ({ apiGetClient: vi.fn(), apiMutate: vi.fn() }));
+const replace = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
 
 const competitor = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -129,7 +131,10 @@ function mockDashboard(data?: {
   });
 }
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  replace.mockClear();
+});
 
 describe("dashboard", () => {
   it("shows material findings, active competitors with latest status, run warnings, brief, and limit use", async () => {
@@ -203,9 +208,8 @@ describe("dashboard", () => {
 
     mockDashboard({ competitors: [], findings: [], runs: [], briefs: [] });
     const empty = renderWithQuery(<DashboardView />);
-    expect(await screen.findByText("No material findings yet.")).toBeInTheDocument();
-    expect(screen.getByText("No active competitors yet.")).toBeInTheDocument();
-    expect(screen.getByText("No weekly briefs yet.")).toBeInTheDocument();
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/competitors/new"));
+    expect(screen.getByText("Taking you to guided setup…")).toBeInTheDocument();
     empty.unmount();
 
     vi.mocked(apiGetClient).mockRejectedValue(new Error("dashboard unavailable"));

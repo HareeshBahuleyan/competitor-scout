@@ -27,8 +27,8 @@ export function SourceApprovalList({
         </h2>
         <p className="mt-1 text-sm text-slate-600" role="status">
           {hasApprovedSource
-            ? "Daily monitoring is active."
-            : "Approve at least one source to activate daily monitoring."}
+            ? "At least one trusted source is approved."
+            : "Approve at least one trusted source before activating monitoring."}
         </p>
       </div>
 

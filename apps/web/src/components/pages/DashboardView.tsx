@@ -2,6 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 import { FindingCard } from "@/components/FindingCard";
 import { LoadingState } from "@/components/ui/LoadingState";
@@ -27,6 +29,7 @@ function latestRunFor(competitorId: string, runs: Run[]) {
 }
 
 export function DashboardView() {
+  const router = useRouter();
   const competitors = useQuery({
     queryKey: ["dashboard", "competitors"],
     queryFn: () => apiGetClient("/api/v1/competitors?limit=100", competitorPageSchema),
@@ -52,6 +55,11 @@ export function DashboardView() {
     queryKey: ["dashboard", "briefs"],
     queryFn: () => apiGetClient("/api/v1/briefs?limit=1", weeklyBriefPageSchema),
   });
+  useEffect(() => {
+    if (competitors.data?.items.length === 0) {
+      router.replace("/competitors/new");
+    }
+  }, [competitors.data?.items.length, router]);
 
   const queries = [competitors, criticalFindings, highFindings, mediumFindings, runs, briefs];
   if (queries.some((query) => query.isPending)) {
@@ -84,6 +92,9 @@ export function DashboardView() {
         Dashboard data is unavailable.
       </p>
     );
+  }
+  if (competitorPage.items.length === 0) {
+    return <p role="status">Taking you to guided setup…</p>;
   }
 
   const activeCompetitors = competitorPage.items.filter((item) => item.status === "active");
