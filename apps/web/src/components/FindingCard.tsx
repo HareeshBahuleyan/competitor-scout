@@ -1,8 +1,15 @@
 import Link from "next/link";
 
+import { formatUserDateTime } from "@/lib/dates";
 import type { Finding } from "@/lib/schemas";
 
-export function FindingCard({ finding }: { finding: Finding }) {
+export function FindingCard({
+  finding,
+  timeZone = "UTC",
+}: {
+  finding: Finding;
+  timeZone?: string;
+}) {
   return (
     <article className="surface surface-interactive group p-5">
       <div className="flex items-start gap-4">
@@ -40,7 +47,7 @@ export function FindingCard({ finding }: { finding: Finding }) {
               {Math.round(finding.confidence * 100)}% confidence
             </span>
             <time dateTime={finding.published_at}>
-              {new Date(finding.published_at).toLocaleString("en-US", { timeZone: "UTC" })}
+              {formatUserDateTime(finding.published_at, timeZone)}
             </time>
           </div>
         </div>

@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from urllib.parse import urlsplit
 
-from sqlalchemy import or_, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,7 @@ from competitor_scout.models.intelligence import (
     ApprovalStatus,
     Competitor,
     CompetitorStatus,
+    Finding,
     MonitoredSource,
     RunType,
     ScoutRun,
@@ -203,10 +204,17 @@ def safe_task_output(task: AgentTask) -> dict[str, object] | None:
     return safe if isinstance(safe, dict) else None
 
 
-def run_read(run: ScoutRun) -> RunRead:
+def run_read(
+    run: ScoutRun,
+    *,
+    competitor_name: str | None = None,
+    finding_count: int = 0,
+) -> RunRead:
     return RunRead(
         id=run.id,
         competitor_id=run.competitor_id,
+        competitor_name=competitor_name,
+        finding_count=finding_count,
         run_type=run.run_type,
         status=run.status,
         scheduled_for=run.scheduled_for,
@@ -372,7 +380,27 @@ async def list_runs(
     status: ScoutRunStatus | None,
     run_type: RunType | None,
 ) -> Page[RunRead]:
-    statement = select(ScoutRun).where(ScoutRun.user_id == user_id)
+    finding_counts = (
+        select(
+            Finding.originating_scout_run_id.label("run_id"),
+            func.count(Finding.id).label("finding_count"),
+        )
+        .group_by(Finding.originating_scout_run_id)
+        .subquery()
+    )
+    statement = (
+        select(
+            ScoutRun,
+            Competitor.name.label("competitor_name"),
+            func.coalesce(finding_counts.c.finding_count, 0).label("finding_count"),
+        )
+        .outerjoin(
+            Competitor,
+            (Competitor.id == ScoutRun.competitor_id) & (Competitor.user_id == user_id),
+        )
+        .outerjoin(finding_counts, finding_counts.c.run_id == ScoutRun.id)
+        .where(ScoutRun.user_id == user_id)
+    )
     if competitor_id is not None:
         statement = statement.where(ScoutRun.competitor_id == competitor_id)
     if status is not None:
@@ -389,7 +417,7 @@ async def list_runs(
         )
     records = list(
         (
-            await session.scalars(
+            await session.execute(
                 statement.order_by(ScoutRun.created_at.desc(), ScoutRun.id.desc()).limit(limit + 1)
             )
         ).all()
@@ -397,9 +425,46 @@ async def list_runs(
     has_more = len(records) > limit
     visible = records[:limit]
     return Page(
-        items=[run_read(run) for run in visible],
-        next_cursor=(_encode_cursor(visible[-1].created_at, visible[-1].id) if has_more else None),
+        items=[
+            run_read(run, competitor_name=competitor_name, finding_count=finding_count)
+            for run, competitor_name, finding_count in visible
+        ],
+        next_cursor=(
+            _encode_cursor(visible[-1][0].created_at, visible[-1][0].id) if has_more else None
+        ),
     )
+
+
+async def run_summary(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    run_id: uuid.UUID,
+) -> RunRead | None:
+    finding_count = (
+        select(func.count(Finding.id))
+        .where(Finding.originating_scout_run_id == ScoutRun.id)
+        .correlate(ScoutRun)
+        .scalar_subquery()
+    )
+    row = (
+        await session.execute(
+            select(
+                ScoutRun,
+                Competitor.name.label("competitor_name"),
+                finding_count.label("finding_count"),
+            )
+            .outerjoin(
+                Competitor,
+                (Competitor.id == ScoutRun.competitor_id) & (Competitor.user_id == user_id),
+            )
+            .where(ScoutRun.id == run_id, ScoutRun.user_id == user_id)
+        )
+    ).one_or_none()
+    if row is None:
+        return None
+    run, competitor_name, count = row
+    return run_read(run, competitor_name=competitor_name, finding_count=count)
 
 
 async def owned_run(

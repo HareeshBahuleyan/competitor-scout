@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { SourceApprovalList } from "@/components/SourceApprovalList";
 import type { Source } from "@/lib/schemas";
@@ -38,6 +38,31 @@ describe("SourceApprovalList", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Reject Pricing" }));
 
+    expect(onUpdate).toHaveBeenCalledWith(pricingSource.id, "rejected");
+  });
+
+  it("confirms before rejecting the last approved source", async () => {
+    const onUpdate = vi.fn();
+    render(
+      <SourceApprovalList
+        onUpdate={onUpdate}
+        sources={[{ ...pricingSource, approval_status: "approved" }]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Reject Pricing" }));
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Stop scheduled monitoring?" })).toHaveTextContent(
+      "Rejecting Pricing leaves this monitor without an approved source",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Keep source" }));
+    expect(onUpdate).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Reject Pricing" })).toHaveFocus(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Reject Pricing" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reject source" }));
     expect(onUpdate).toHaveBeenCalledWith(pricingSource.id, "rejected");
   });
 

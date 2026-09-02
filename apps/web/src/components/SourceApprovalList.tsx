@@ -1,5 +1,7 @@
 "use client";
 
+import { useRef, useState } from "react";
+
 import type { Source } from "@/lib/schemas";
 
 type SourceDecision = "approved" | "rejected";
@@ -18,6 +20,23 @@ export function SourceApprovalList({
   sources,
 }: SourceApprovalListProps) {
   const hasApprovedSource = sources.some((source) => source.approval_status === "approved");
+  const approvedCount = sources.filter((source) => source.approval_status === "approved").length;
+  const [confirmSource, setConfirmSource] = useState<Source | null>(null);
+  const rejectButtons = useRef(new Map<string, HTMLButtonElement>());
+
+  function closeConfirmation() {
+    const sourceId = confirmSource?.id;
+    setConfirmSource(null);
+    if (sourceId) requestAnimationFrame(() => rejectButtons.current.get(sourceId)?.focus());
+  }
+
+  function reject(source: Source) {
+    if (source.approval_status === "approved" && approvedCount === 1) {
+      setConfirmSource(source);
+      return;
+    }
+    void onUpdate(source.id, "rejected");
+  }
 
   return (
     <section aria-labelledby="source-approvals-heading" className="space-y-4">
@@ -75,7 +94,11 @@ export function SourceApprovalList({
                     aria-label={`Reject ${source.title}`}
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:text-slate-400"
                     disabled={actionsDisabled}
-                    onClick={() => void onUpdate(source.id, "rejected")}
+                    onClick={() => reject(source)}
+                    ref={(node) => {
+                      if (node) rejectButtons.current.set(source.id, node);
+                      else rejectButtons.current.delete(source.id);
+                    }}
                     type="button"
                   >
                     Reject
@@ -91,6 +114,44 @@ export function SourceApprovalList({
           );
         })}
       </ul>
+      {confirmSource ? (
+        <div
+          aria-labelledby="reject-source-heading"
+          aria-modal="true"
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4"
+          role="dialog"
+        >
+          <div className="surface max-w-md space-y-4 p-6">
+            <h2 className="text-xl font-semibold" id="reject-source-heading">
+              Stop scheduled monitoring?
+            </h2>
+            <p className="text-sm text-slate-600">
+              Rejecting {confirmSource.title} leaves this monitor without an approved source, so
+              scheduled monitoring will stop until another source is approved.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                autoFocus
+                className="rounded-lg border border-slate-300 px-4 py-2 font-medium"
+                onClick={closeConfirmation}
+                type="button"
+              >
+                Keep source
+              </button>
+              <button
+                className="rounded-lg bg-red-700 px-4 py-2 font-medium text-white"
+                onClick={() => {
+                  void onUpdate(confirmSource.id, "rejected");
+                  setConfirmSource(null);
+                }}
+                type="button"
+              >
+                Reject source
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

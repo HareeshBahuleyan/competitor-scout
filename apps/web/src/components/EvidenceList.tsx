@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { formatUserDateTime } from "@/lib/dates";
+
 export type EvidenceItem = {
   id: string;
   citation_order: number;
@@ -14,6 +16,7 @@ export type EvidenceItem = {
 
 type EvidenceListProps = {
   evidence: readonly EvidenceItem[];
+  timeZone?: string;
 };
 
 function safeHttpsUrl(value: string) {
@@ -25,19 +28,7 @@ function safeHttpsUrl(value: string) {
   }
 }
 
-function formatTimestamp(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    month: "short",
-    timeZone: "UTC",
-    timeZoneName: "short",
-    year: "numeric",
-  }).format(new Date(value));
-}
-
-export function EvidenceList({ evidence }: EvidenceListProps) {
+export function EvidenceList({ evidence, timeZone = "UTC" }: EvidenceListProps) {
   const orderedEvidence = [...evidence].sort(
     (first, second) => first.citation_order - second.citation_order,
   );
@@ -80,7 +71,7 @@ export function EvidenceList({ evidence }: EvidenceListProps) {
                     <dd>
                       {item.published_at ? (
                         <time dateTime={item.published_at}>
-                          {formatTimestamp(item.published_at)}
+                          {formatUserDateTime(item.published_at, timeZone)}
                         </time>
                       ) : (
                         "Publication time unavailable"
@@ -90,7 +81,9 @@ export function EvidenceList({ evidence }: EvidenceListProps) {
                   <div>
                     <dt className="font-medium text-slate-700">Captured</dt>
                     <dd>
-                      <time dateTime={item.captured_at}>{formatTimestamp(item.captured_at)}</time>
+                      <time dateTime={item.captured_at}>
+                        {formatUserDateTime(item.captured_at, timeZone)}
+                      </time>
                     </dd>
                   </div>
                 </dl>

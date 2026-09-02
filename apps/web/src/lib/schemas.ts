@@ -168,6 +168,8 @@ export const runLifecycleStepSchema = z.object({
 export const runSchema = z.object({
   id: z.string().uuid(),
   competitor_id: z.string().uuid().nullable(),
+  competitor_name: z.string().nullable(),
+  finding_count: z.number().int().nonnegative(),
   run_type: runTypeSchema,
   status: runStatusSchema,
   scheduled_for: timestampSchema,

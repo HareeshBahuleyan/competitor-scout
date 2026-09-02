@@ -7,10 +7,9 @@ import type { ReactNode } from "react";
 type IconName = "briefs" | "competitors" | "dashboard" | "findings" | "runs" | "settings";
 
 const navigation: ReadonlyArray<{ href: string; icon: IconName; label: string }> = [
-  { href: "/", icon: "dashboard", label: "Dashboard" },
+  { href: "/", icon: "dashboard", label: "Overview" },
   { href: "/competitors", icon: "competitors", label: "Competitors" },
-  { href: "/findings", icon: "findings", label: "Findings" },
-  { href: "/runs", icon: "runs", label: "Runs" },
+  { href: "/findings", icon: "findings", label: "Intelligence" },
   { href: "/briefs", icon: "briefs", label: "Briefs" },
   { href: "/settings", icon: "settings", label: "Settings" },
 ];

@@ -10,6 +10,8 @@ import { apiGetClient, apiMutate } from "@/lib/api";
 import { renderWithQuery } from "../query-test-utils";
 
 vi.mock("@/lib/api", () => ({ apiGetClient: vi.fn(), apiMutate: vi.fn() }));
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 
 const competitor = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -47,6 +49,8 @@ const settings = {
 const run = (status: string, failure_summary: string | null = null) => ({
   id: "44444444-4444-4444-8444-444444444444",
   competitor_id: competitor.id,
+  competitor_name: competitor.name,
+  finding_count: 0,
   run_type: "source_discovery",
   status,
   scheduled_for: "2026-08-21T08:00:00Z",
@@ -333,7 +337,7 @@ describe("competitor pages", () => {
       "action",
       "/findings",
     );
-    expect(screen.getByRole("button", { name: "Activate monitoring" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Resume monitoring" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Approve Pricing" }));
     await waitFor(() =>
       expect(apiMutate).toHaveBeenCalledWith(
@@ -346,8 +350,8 @@ describe("competitor pages", () => {
         expect.anything(),
       ),
     );
-    expect(screen.getByRole("button", { name: "Activate monitoring" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("button", { name: "Activate monitoring" }));
+    expect(screen.getByRole("button", { name: "Resume monitoring" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Resume monitoring" }));
     await waitFor(() =>
       expect(apiMutate).toHaveBeenCalledWith(
         `/api/v1/competitors/${competitor.id}`,
@@ -355,5 +359,83 @@ describe("competitor pages", () => {
         expect.anything(),
       ),
     );
+  });
+
+  it("edits, pauses, adds a source, and confirms archiving a monitor", async () => {
+    const activeCompetitor = { ...competitor, status: "active" };
+    vi.mocked(apiGetClient).mockImplementation(async (path) => {
+      if (path === "/api/v1/me") return me as never;
+      if (path.endsWith("/sources")) return { items: [source], next_cursor: null } as never;
+      if (path.startsWith("/api/v1/findings?")) return { items: [], next_cursor: null } as never;
+      if (path.startsWith("/api/v1/runs?")) return { items: [], next_cursor: null } as never;
+      return activeCompetitor as never;
+    });
+    vi.mocked(apiMutate).mockImplementation(async (path, options) => {
+      if (options.method === "DELETE") return undefined as never;
+      if (path.endsWith("/sources")) return source as never;
+      return { ...activeCompetitor, ...(options.body as object) } as never;
+    });
+
+    renderWithQuery(<CompetitorDetailView competitorId={competitor.id} />);
+    await screen.findByRole("heading", { name: "Acme" });
+    expect(screen.getByRole("heading", { name: "Monitoring daily" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Monitor name"), { target: { value: "Acme Inc." } });
+    fireEvent.change(screen.getByLabelText("Description"), {
+      target: { value: "Updated widgets" },
+    });
+    fireEvent.change(screen.getByLabelText("Daily run time"), { target: { value: "09:30" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save monitor" }));
+    await waitFor(() =>
+      expect(apiMutate).toHaveBeenCalledWith(
+        `/api/v1/competitors/${competitor.id}`,
+        expect.objectContaining({
+          body: {
+            daily_run_time_local: "09:30:00",
+            description: "Updated widgets",
+            name: "Acme Inc.",
+          },
+          method: "PATCH",
+        }),
+        expect.anything(),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Pause monitoring" }));
+    await waitFor(() =>
+      expect(apiMutate).toHaveBeenCalledWith(
+        `/api/v1/competitors/${competitor.id}`,
+        expect.objectContaining({ body: { status: "paused" }, method: "PATCH" }),
+        expect.anything(),
+      ),
+    );
+
+    fireEvent.change(screen.getByLabelText("Add first-party source"), {
+      target: { value: "https://acme.example/blog" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add source" }));
+    await waitFor(() =>
+      expect(apiMutate).toHaveBeenCalledWith(
+        `/api/v1/competitors/${competitor.id}/sources`,
+        expect.objectContaining({
+          body: { url: "https://acme.example/blog" },
+          method: "POST",
+        }),
+        expect.anything(),
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Archive monitor" }));
+    expect(screen.getByRole("dialog", { name: "Archive Acme?" })).toHaveTextContent(
+      "Existing findings and run history are retained",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Archive Acme" }));
+    await waitFor(() =>
+      expect(apiMutate).toHaveBeenCalledWith(
+        `/api/v1/competitors/${competitor.id}`,
+        expect.objectContaining({ method: "DELETE" }),
+      ),
+    );
+    expect(push).toHaveBeenCalledWith("/competitors");
   });
 });

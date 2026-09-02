@@ -62,10 +62,6 @@ export function AppShell({ children }: AppShellProps) {
         </Suspense>
 
         <div className="mt-auto hidden px-3 pb-1 lg:block">
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <span className="size-2 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.12)]" />
-            Scout is ready
-          </div>
           <LogoutButton />
         </div>
       </aside>

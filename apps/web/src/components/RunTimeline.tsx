@@ -21,23 +21,12 @@ type RunTimelineProps = {
   status: RunStatus;
   steps: readonly RunTimelineStep[];
   usage?: RunUsage | null;
+  timeZone?: string;
 };
 
 function humanize(value: string) {
   const words = value.replaceAll("_", " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
-function formatTimestamp(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    month: "short",
-    timeZone: "UTC",
-    timeZoneName: "short",
-    year: "numeric",
-  }).format(new Date(value));
 }
 
 function knownNumber(value: number | null | undefined) {
@@ -60,6 +49,7 @@ export function RunTimeline({
   retry_count: retryCount,
   status,
   steps,
+  timeZone = "UTC",
   usage,
 }: RunTimelineProps) {
   const orderedSteps = [...steps].sort(
@@ -97,7 +87,7 @@ export function RunTimeline({
             />
             <p className="font-medium text-slate-950">{humanize(step.state)}</p>
             <time className="text-sm text-slate-500" dateTime={step.occurred_at}>
-              {formatTimestamp(step.occurred_at)}
+              {formatUserDateTime(step.occurred_at, timeZone)}
             </time>
           </li>
         ))}
@@ -147,3 +137,4 @@ export function RunTimeline({
     </section>
   );
 }
+import { formatUserDateTime } from "@/lib/dates";
