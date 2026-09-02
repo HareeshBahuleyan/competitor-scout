@@ -13,13 +13,13 @@ The backend (FastAPI API + Scout worker + PostgreSQL) runs in Docker. The fronte
 
 ## Prerequisites
 
-| Tool | Version | Needed for |
-| --- | --- | --- |
-| Docker + Compose | current | PostgreSQL, API, worker |
-| Node.js | 22 | frontend dev server |
-| pnpm | 10.11.1 | frontend dependencies (`corepack enable pnpm`) |
-| Python | 3.12 | host-side backend commands |
-| [uv](https://docs.astral.sh/uv/) | current | backend tests, lint, migrations |
+| Tool                             | Version | Needed for                                     |
+| -------------------------------- | ------- | ---------------------------------------------- |
+| Docker + Compose                 | current | PostgreSQL, API, worker                        |
+| Node.js                          | 22      | frontend dev server                            |
+| pnpm                             | 10.11.1 | frontend dependencies (`corepack enable pnpm`) |
+| Python                           | 3.12    | host-side backend commands                     |
+| [uv](https://docs.astral.sh/uv/) | current | backend tests, lint, migrations                |
 
 Python and `uv` are only required to run backend tests, linting, or migrations on the
 host — the containers install their own dependencies.
@@ -52,12 +52,12 @@ docker compose up --build
 
 This starts four services:
 
-| Service | Role |
-| --- | --- |
-| `postgres` | PostgreSQL 16, exposed on `localhost:5432` |
-| `prestart` | one-shot `alembic upgrade head`; must exit successfully first |
-| `backend-api` | Uvicorn API on `http://localhost:8000` |
-| `scout-worker` | background Scout Run executor |
+| Service        | Role                                                          |
+| -------------- | ------------------------------------------------------------- |
+| `postgres`     | PostgreSQL 16, exposed on `localhost:5432`                    |
+| `prestart`     | one-shot `alembic upgrade head`; must exit successfully first |
+| `backend-api`  | Uvicorn API on `http://localhost:8000`                        |
+| `scout-worker` | background Scout Run executor                                 |
 
 `backend-api` and `scout-worker` wait for `prestart` to complete, so a failed migration
 stops the stack rather than starting a half-configured API. Check readiness with

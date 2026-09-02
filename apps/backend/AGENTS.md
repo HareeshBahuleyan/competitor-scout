@@ -32,7 +32,8 @@ Dependencies should generally point inward from `api` and `jobs` toward services
 - Keep job payloads small, JSON-safe, and identifier-based; reload authoritative state inside the handler.
 - Preserve configured task, search, token, deadline, concurrency, confidence, and cost ceilings.
 - Do not weaken structured-output validation, evidence scope validation, prompt-injection defenses, or publication grounding.
-- Keep the worker at one production replica until the process-local Otari semaphore is replaced with shared coordination.
+
+`docs/architecture/agent-runtime.md` explains why these ceilings and the single-replica worker are correctness controls.
 
 ## Migrations
 

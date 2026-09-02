@@ -30,11 +30,15 @@ Add endpoints through the repository's existing transport, service, persistence,
 
 ## Verification
 
-| Change                     | Minimum checks                                                                                         |
-| -------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Route/service/schema       | `cd apps/backend && uv run pytest tests/unit tests/integration && uv run ruff check src tests scripts` |
-| Model or migration         | Above, then `uv run alembic upgrade head && uv run alembic check` against a disposable/test database   |
-| Frontend-consumed contract | Backend checks, then `cd apps/web && pnpm test && pnpm lint && pnpm build`                             |
+Use the verification matrix in the root `AGENTS.md`, selecting rows by what the change touched:
+
+| Change                     | Matrix rows             |
+| -------------------------- | ----------------------- |
+| Route, service, or schema  | Backend                 |
+| Model or migration         | Backend, then Migration |
+| Frontend-consumed contract | Cross-stack contract    |
+
+During iteration, narrow the backend row to the affected tests (`uv run pytest tests/unit tests/integration`) before running the full suite.
 
 Do not run paid Otari evaluations unless the user explicitly approves them.
 

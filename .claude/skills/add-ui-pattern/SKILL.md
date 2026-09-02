@@ -12,11 +12,7 @@ Extend the interface through semantic design tokens, accessible behavior, and th
 1. Read the root and web `AGENTS.md` files and `docs/frontend/design-system.md`.
 2. Inspect the installed Next.js guide relevant to the change under `apps/web/node_modules/next/dist/docs/`; do not rely on remembered framework behavior.
 3. Search `apps/web/src/components`, `globals.css`, and HeroUI usage for an existing pattern before adding one.
-4. Choose the smallest ownership level:
-   - Keep one-off page composition in `components/pages/`.
-   - Put reusable product components in `components/`.
-   - Put generic visual or interaction primitives in `components/ui/`.
-   - Use HeroUI when it already supplies the required accessible behavior and can be styled consistently.
+4. Choose the smallest ownership level using the component-ownership table in `docs/frontend/design-system.md`.
 5. Reuse semantic CSS variables from `globals.css`. Add a token only when it expresses a reusable design decision; avoid repeating literal brand colors in JSX.
 6. Prefer a server component. Add `"use client"` only for state, effects, event handlers, or browser-only APIs, and keep the client boundary narrow.
 7. Implement semantic HTML and keyboard behavior first. Provide visible focus, programmatic labels, error associations, appropriate live regions, and text or icons in addition to color.
@@ -38,16 +34,13 @@ Extend the interface through semantic design tokens, accessible behavior, and th
 
 ## Verification
 
-Run from `apps/web`:
+During iteration, run the focused test from `apps/web`:
 
 ```bash
-pnpm exec prettier --check <changed-files>
 pnpm test -- <focused-test-file>
-pnpm lint
-pnpm build
 ```
 
-Run `pnpm test:e2e` when navigation, authentication, or a private-alpha critical path changes.
+Before completion, run the frontend row of the verification matrix in the root `AGENTS.md`. Add the critical-browser-flow row when navigation, authentication, or another first-login-to-first-scan path changes.
 
 ## Common mistakes
 

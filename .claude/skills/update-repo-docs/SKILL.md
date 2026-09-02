@@ -47,7 +47,7 @@ Document verified current behavior in the smallest authoritative location and re
 - Run Prettier on changed Markdown and YAML files.
 - Run `git diff --check` and scan new files for unfinished placeholders and trailing whitespace.
 - Resolve every changed local Markdown link to an existing file.
-- Run `quick_validate.py` for every changed repository skill.
+- Confirm every changed skill in `.claude/skills/` still has valid YAML frontmatter with `name` and `description`.
 - Run application tests required by the underlying code change; prose-only edits do not require unrelated application suites.
 
 ## Common mistakes

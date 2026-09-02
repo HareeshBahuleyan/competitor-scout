@@ -1,6 +1,6 @@
 # Competitor Scout agent guide
 
-These instructions apply to the whole repository. Read the nearest nested `AGENTS.md` before changing files under `apps/backend` or `apps/web`; nested instructions add to or override this file for their subtree.
+These instructions apply to the whole repository. Read the nearest nested `AGENTS.md` before changing files under `apps/backend` or `apps/web`; nested instructions add to or override this file for their subtree. Each `AGENTS.md` has a sibling `CLAUDE.md` that imports it — keep the pair together when adding a guide.
 
 ## Working style
 
@@ -23,6 +23,10 @@ These instructions apply to the whole repository. Read the nearest nested `AGENT
 | `.claude/skills`             | Tracked repository-specific agent workflows                          |
 
 The root `README.md` is the human quick start. Keep operational agent rules here and explanatory design context under `docs/`.
+
+This file owns the cross-cutting invariants and the verification matrix below. Nested guides and skills should link to them rather than restate them, so a rule has one place to change.
+
+`docs/superpowers/` is gitignored local scratch space holding plans and specs from earlier sessions, and `.agents/` is machine-local harness wiring. Neither is current repository behavior.
 
 ## Cross-cutting invariants
 
@@ -60,4 +64,4 @@ Do not run `apps/backend/scripts/run_live_evals.py` without explicit approval.
 - Use `add-ui-pattern` for reusable frontend components and interaction patterns.
 - Use `update-repo-docs` when a change affects setup, architecture, runtime behavior, deployment, or design conventions.
 
-Skill sources live in `.claude/skills/`. For local Codex discovery, expose them as relative symlinks under `.agents/skills/`; `.agents/` is machine-local and must stay in `.git/info/exclude`, not the tracked `.gitignore`.
+Skill sources live in `.claude/skills/` and are the tracked copy. Harnesses that discover skills elsewhere may be pointed at them locally — for example relative symlinks under `.agents/skills/` for Codex — but that wiring is optional, machine-local, and must never be committed.

@@ -19,27 +19,28 @@ Read `docs/frontend/design-system.md` before adding reusable components, tokens,
 - This app uses Next.js 16, React 19, Tailwind CSS 4, HeroUI 3, TanStack Query 5, and Zod 3. Inspect the relevant installed Next.js guide under `node_modules/next/dist/docs/` before changing framework behavior.
 - Prefer server components. Add `"use client"` only for state, effects, event handlers, context, or browser-only APIs; keep client boundaries narrow.
 - Keep `src/app/` route files focused on metadata, parameters, and view composition.
-- Put page-level data orchestration in `src/components/pages/`, reusable product components in `src/components/`, and generic visual or interaction primitives in `src/components/ui/`.
+- Choose the component ownership level from the table in `docs/frontend/design-system.md`.
 - Use the `@/` import alias for application modules.
 
 ## API and security
 
 - Call same-origin relative paths through `src/lib/api.ts`; do not call the private backend URL from browser code.
 - Preserve `credentials: "include"`, redirect-on-401 behavior, CSRF headers on mutations, safe problem-details parsing, and the same-origin path assertion.
-- Parse every JSON response with a Zod schema from `src/lib/schemas.ts`. Keep it synchronized with the backend Pydantic response model.
+- Parse every JSON response with a Zod schema from `src/lib/schemas.ts`; the backend Pydantic model is the contract's source of truth.
 - Never expose secrets in `NEXT_PUBLIC_*` variables or render sensitive agent task output that the backend intentionally filters.
 
 ## UI rules
 
+`docs/frontend/design-system.md` owns the tokens, status roles, state coverage, and accessibility requirements. The rules that decide whether a change belongs here:
+
 - Reuse semantic variables and established patterns in `src/app/globals.css`; do not add literal product colors when a semantic token fits.
 - Use HeroUI when it provides useful accessible behavior and matches an existing project pattern. Use semantic HTML or a small local component for simple markup.
-- Cover loading, empty, error, populated, disabled, and submitting states as applicable.
-- Pair status colors with text or another non-color signal. Preserve visible focus, keyboard access, form error associations, live-region behavior, responsive layout, and reduced motion.
 - Extract a shared component only when it centralizes repeated markup, behavior, tokens, or accessibility requirements.
 
 ## Tests and verification
 
 - Use Testing Library and Vitest for user-visible behavior, semantics, forms, and state transitions. Avoid assertions coupled only to Tailwind class strings.
 - Use Playwright for critical authentication and cross-page workflows, not for every component variant.
-- During iteration, run the focused test. Before completion, run `pnpm format:check`, `pnpm test`, `pnpm lint`, and `pnpm build`; add `pnpm test:e2e` when a critical browser flow changes.
 - Do not update snapshots or loosen assertions merely to make a failure disappear; verify the intended behavior first.
+
+During iteration, run the focused test. Before completion, run the frontend commands from the verification matrix in the root `AGENTS.md`.
