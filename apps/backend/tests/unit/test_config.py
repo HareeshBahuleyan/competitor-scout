@@ -29,7 +29,7 @@ def test_settings_reject_short_secrets(field: str) -> None:
 
 
 def test_operational_defaults_are_bounded() -> None:
-    settings = Settings(**valid_values())
+    settings = Settings(_env_file=None, **valid_values())
 
     assert settings.max_active_users == 10
     assert settings.max_active_competitors == 10
@@ -50,6 +50,13 @@ def test_operational_defaults_are_bounded() -> None:
     assert settings.max_synthesis_repairs == 1
     assert settings.max_child_retries == 1
     assert settings.max_otari_concurrency == 8
+    assert settings.publish_non_material_findings is False
+
+
+def test_non_material_publication_can_be_enabled() -> None:
+    settings = Settings(**(valid_values() | {"publish_non_material_findings": True}))
+
+    assert settings.publish_non_material_findings is True
 
 
 def test_default_otari_policy_routes_all_agent_roles(monkeypatch: pytest.MonkeyPatch) -> None:

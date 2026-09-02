@@ -11,7 +11,7 @@ from decimal import Decimal
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from competitor_scout.agents.contracts import FindingCategory, SignificanceLevel, SourceType
@@ -159,6 +159,7 @@ def finding(
     evidence_indexes: list[int] | None = None,
     primary_evidence_index: int = 0,
     confidence: Decimal = Decimal("0.9500"),
+    material_change: bool = True,
 ) -> FindingPublication:
     return FindingPublication(
         category=FindingCategory.PRICING,
@@ -168,11 +169,41 @@ def finding(
         significance_level=SignificanceLevel.HIGH,
         confidence=confidence,
         normalized_claim=normalized_claim,
-        material_change=True,
+        material_change=material_change,
         evidence_indexes=evidence_indexes or [0],
         primary_evidence_index=primary_evidence_index,
         decision_rationale="The cited first-party page directly supports the claim.",
     )
+
+
+async def test_non_material_publication_is_opt_in(publication_store) -> None:
+    rejected_context = await seed_context(publication_store, "non-material-rejected")
+    with pytest.raises(PublicationValidationError, match="not a material change"):
+        await FindingPublicationService(publication_store).publish(
+            user_id=rejected_context.user_id,
+            competitor_id=rejected_context.competitor_id,
+            scout_run_id=rejected_context.scout_run_id,
+            finding=finding(material_change=False),
+            evidence=[evidence(rejected_context)],
+            published_at=NOW,
+        )
+
+    accepted_context = await seed_context(publication_store, "non-material-accepted")
+    record = await FindingPublicationService(
+        publication_store,
+        allow_non_material_findings=True,
+    ).publish(
+        user_id=accepted_context.user_id,
+        competitor_id=accepted_context.competitor_id,
+        scout_run_id=accepted_context.scout_run_id,
+        finding=finding(material_change=False),
+        evidence=[evidence(accepted_context)],
+        published_at=NOW,
+    )
+
+    assert record.competitor_id == accepted_context.competitor_id
+    async with publication_store.begin() as session:
+        await session.execute(delete(User).where(User.id == accepted_context.user_id))
 
 
 async def test_publication_rejects_bad_citation_without_orphan_rows(publication_store) -> None:

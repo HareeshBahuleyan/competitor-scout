@@ -166,9 +166,11 @@ class FindingPublicationService:
         session_factory: SessionFactory,
         *,
         minimum_confidence: Decimal = Decimal("0.70"),
+        allow_non_material_findings: bool = False,
     ) -> None:
         self._session_factory = session_factory
         self._minimum_confidence = minimum_confidence
+        self._allow_non_material_findings = allow_non_material_findings
 
     async def publish(
         self,
@@ -182,7 +184,7 @@ class FindingPublicationService:
     ) -> Finding:
         if published_at.tzinfo is None:
             raise PublicationValidationError("publication time must be timezone-aware")
-        if not finding.material_change:
+        if not finding.material_change and not self._allow_non_material_findings:
             raise PublicationValidationError("finding is not a material change")
         if finding.confidence < self._minimum_confidence:
             raise PublicationValidationError("finding confidence is below publication threshold")

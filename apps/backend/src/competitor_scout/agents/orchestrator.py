@@ -1333,8 +1333,6 @@ class ScoutOrchestrator:
             for item in accepted
         ]
         for candidate in result.findings:
-            if not candidate.material_change:
-                continue
             finding = FindingPublication(
                 category=candidate.category,
                 title=candidate.title,

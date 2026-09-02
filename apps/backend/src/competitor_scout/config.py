@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     estimated_main_request_cost_usd: Decimal = Field(default=Decimal("0.20"), gt=0)
     estimated_child_request_cost_usd: Decimal = Field(default=Decimal("0.10"), gt=0)
     finding_confidence_threshold: float = Field(default=0.70, ge=0, le=1)
+    publish_non_material_findings: bool = False
     e2e_auth_secret: SecretStr | None = None
 
     @field_validator("e2e_auth_secret", mode="before")

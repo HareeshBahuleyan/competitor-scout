@@ -27,7 +27,7 @@ stateDiagram-v2
 4. Child tasks execute in bounded waves. Each task has a role, kind, model, objective, scope, attempts, timestamps, usage, and safe failure data.
 5. Evidence is normalized, checked against approved or permitted source scope, deduplicated, and persisted. A per-run observation row preserves which run and successful child task accepted content even when the content-addressed evidence row already exists.
 6. The main model synthesizes accepted evidence into a structured result. A requested first snapshot uses the initial-only dual-output contract; recurring scans keep the finding-only contract.
-7. `SnapshotPublicationService` publishes a required, grounded Starting Snapshot before optional findings during an initial scan. `FindingPublicationService` separately revalidates grounding, confidence, citations, and deduplication before publishing findings.
+7. `SnapshotPublicationService` publishes a required, grounded Starting Snapshot before optional findings during an initial scan. `FindingPublicationService` separately revalidates grounding, confidence, citations, and deduplication before publishing findings. By default it admits only candidates the synthesizer classifies as material changes. Operators can temporarily set `PUBLISH_NON_MATERIAL_FINDINGS=true` to admit grounded, sufficiently confident non-material candidates as well; this does not relax any other publication validation.
 8. The run ends as `completed`, `partial`, or `failed`, with usage and safe reasons recorded. An initial scan cannot present snapshot success until the immutable artifact is durable.
 
 Re-entry into an intermediate run state indicates recovery after lease loss. The runtime terminalizes interrupted ownership rather than blindly duplicating work.
@@ -55,10 +55,10 @@ The planner assigns each research task an expected category. Accepted evidence c
 
 Initial planning broadens the bounded objective across the already approved first-party source categories without increasing task, search, token, deadline, cost, or concurrency ceilings. Child research and evidence validation run once. Initial synthesis receives opaque IDs for the accepted evidence observations and returns two distinct outputs in one structured request:
 
-- up to ten ordinary finding candidates, which still require temporal evidence and the existing material-change validation;
+- up to ten ordinary finding candidates, which still require temporal evidence and use the default material-change publication policy unless the temporary escape hatch is enabled;
 - one required Starting Snapshot containing an executive summary and one to five uniquely typed, evidence-backed current-state sections.
 
-Current facts are not findings. The application calculates source coverage from approved source state, successful child inspection output, and failed child work; the model cannot author completeness. `SnapshotPublicationService` rechecks the user, competitor, run, pending request, successful observation membership, section limits, and one-snapshot constraints. Snapshot reads resolve citations through the same user-scoped run observations instead of exposing task output or provider responses.
+Current facts are not findings under the default publication policy. The temporary `PUBLISH_NON_MATERIAL_FINDINGS` escape hatch can admit them without changing the synthesizer's classification, while the originating synthesizer task output retains that classification for audit. Published finding rows do not separately persist the boolean. The application calculates source coverage from approved source state, successful child inspection output, and failed child work; the model cannot author completeness. `SnapshotPublicationService` rechecks the user, competitor, run, pending request, successful observation membership, section limits, and one-snapshot constraints. Snapshot reads resolve citations through the same user-scoped run observations instead of exposing task output or provider responses.
 
 Evidence items remain content-addressed across a competitor and retain first-observation provenance. `evidence_observations` records later run-to-evidence acceptance, which lets retries prove qualifying-run grounding without copying full quotes into a second evidence row.
 
