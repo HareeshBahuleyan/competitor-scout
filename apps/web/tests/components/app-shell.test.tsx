@@ -13,9 +13,8 @@ vi.mock("@/components/LogoutButton", () => ({
 const expectedNavigation = [
   ["Dashboard", "/"],
   ["Competitors", "/competitors"],
-  ["Findings", "/findings"],
-  ["Runs", "/runs"],
-  ["Briefs", "/briefs"],
+  ["Updates", "/findings"],
+  ["Weekly digest", "/briefs"],
   ["Settings", "/settings"],
 ] as const;
 
@@ -47,7 +46,7 @@ describe("AppShell", () => {
       </AppShell>,
     );
 
-    expect(screen.getByRole("link", { name: "Findings" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Updates" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "Add competitor" })).toHaveAttribute(
       "href",
       "/competitors/new",

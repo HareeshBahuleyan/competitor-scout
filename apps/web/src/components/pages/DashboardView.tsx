@@ -142,14 +142,14 @@ export function DashboardView() {
           </div>
         </article>
         <article className="surface p-4">
-          <p className="text-xs font-medium text-slate-500">Material signals</p>
+          <p className="text-xs font-medium text-slate-500">Material updates</p>
           <div className="mt-2 flex items-end justify-between gap-3">
             <p className="text-3xl font-semibold tracking-[-0.04em]">{materialFindings.length}</p>
             <span className="mb-1 text-xs text-slate-500">Latest view</span>
           </div>
         </article>
         <article className="surface p-4">
-          <p className="text-xs font-medium text-slate-500">Runs to review</p>
+          <p className="text-xs font-medium text-slate-500">Scans to review</p>
           <div className="mt-2 flex items-end justify-between gap-3">
             <p className="text-3xl font-semibold tracking-[-0.04em]">{unhealthyRuns.length}</p>
             <span
@@ -172,13 +172,13 @@ export function DashboardView() {
           </span>
           <div>
             <h2 className="font-semibold text-amber-950" id="run-warnings-heading">
-              Run health needs attention
+              Some scans need attention
             </h2>
             <ul className="mt-1.5 space-y-1 text-sm text-amber-900">
               {unhealthyRuns.map((run) => (
                 <li key={run.id}>
                   <Link className="font-semibold capitalize underline" href={`/runs/${run.id}`}>
-                    {run.status} run
+                    {run.status} scan
                   </Link>
                   {run.failure_summary ? `: ${run.failure_summary}` : null}
                   {run.partial_reasons.length ? `: ${run.partial_reasons.join("; ")}` : null}
@@ -195,7 +195,7 @@ export function DashboardView() {
             <div>
               <p className="eyebrow">Signal feed</p>
               <h2 className="mt-1 text-xl font-semibold" id="latest-findings-heading">
-                Latest findings
+                Latest updates
               </h2>
             </div>
             <Link className="section-link" href="/findings">
@@ -209,7 +209,7 @@ export function DashboardView() {
               ))}
             </div>
           ) : (
-            <p className="empty-state p-6">No material findings yet.</p>
+            <p className="empty-state p-6">No material updates yet.</p>
           )}
         </section>
 
@@ -270,7 +270,7 @@ export function DashboardView() {
           <section aria-labelledby="latest-brief-heading" className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold" id="latest-brief-heading">
-                Weekly brief
+                Weekly digest
               </h2>
               <Link className="section-link" href="/briefs">
                 Archive
@@ -292,7 +292,7 @@ export function DashboardView() {
                 </p>
               </article>
             ) : (
-              <p className="empty-state p-5 text-sm">No weekly briefs yet.</p>
+              <p className="empty-state p-5 text-sm">No weekly digest yet.</p>
             )}
           </section>
         </div>

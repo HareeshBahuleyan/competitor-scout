@@ -641,15 +641,15 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
       <section className="space-y-4" aria-labelledby="recent-findings-heading">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-xl font-semibold" id="recent-findings-heading">
-            Recent findings
+            Recent updates
           </h2>
           <Link className="section-link" href={`/findings?competitor_id=${competitorId}`}>
-            View all findings
+            View all updates
           </Link>
         </div>
         <form
           action="/findings"
-          aria-label="Filter competitor findings"
+          aria-label="Filter competitor updates"
           className="surface grid gap-3 p-4 sm:grid-cols-4"
           method="get"
         >
@@ -664,10 +664,7 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
           </label>
           <label className="text-sm font-medium">
             Significance
-            <select
-              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2"
-              name="significance"
-            >
+            <select className="select-control mt-1" name="significance">
               <option value="">All levels</option>
               <option value="high">High</option>
               <option value="critical">Critical</option>
@@ -685,7 +682,7 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
             className="self-end rounded-lg bg-slate-950 px-4 py-2 font-medium text-white"
             type="submit"
           >
-            Filter findings
+            Filter updates
           </button>
         </form>
         {findings.data.items.length ? (
@@ -695,16 +692,16 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
             ))}
           </div>
         ) : (
-          <p className="text-sm text-slate-600">No findings for this competitor yet.</p>
+          <p className="text-sm text-slate-600">No updates for this competitor yet.</p>
         )}
       </section>
       <section className="space-y-4" aria-labelledby="recent-runs-heading">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-xl font-semibold" id="recent-runs-heading">
-            Recent runs
+            Recent scans
           </h2>
           <Link className="section-link" href={`/runs?competitor_id=${competitorId}`}>
-            View all runs
+            View all scans
           </Link>
         </div>
         {recentRuns.data.items.length ? (
@@ -725,7 +722,7 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-slate-600">No runs for this competitor yet.</p>
+          <p className="text-sm text-slate-600">No scans for this competitor yet.</p>
         )}
       </section>
     </article>

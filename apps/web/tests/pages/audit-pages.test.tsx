@@ -148,7 +148,7 @@ describe("run pages", () => {
     success.unmount();
     vi.mocked(apiGetClient).mockResolvedValueOnce({ items: [], next_cursor: null } as never);
     const empty = renderWithQuery(<RunsListView />);
-    expect(await screen.findByText("No runs yet.")).toBeInTheDocument();
+    expect(await screen.findByText("No scans yet.")).toBeInTheDocument();
     empty.unmount();
     vi.mocked(apiGetClient).mockRejectedValueOnce(new Error("runs unavailable"));
     renderWithQuery(<RunsListView />);

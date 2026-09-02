@@ -374,9 +374,9 @@ describe("competitor pages", () => {
       .mockResolvedValueOnce({ ...competitor, status: "active" } as never);
     renderWithQuery(<CompetitorDetailView competitorId={competitor.id} />);
     await screen.findByRole("heading", { name: "Acme" });
-    expect(screen.getByRole("heading", { name: "Recent findings" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Recent runs" })).toBeInTheDocument();
-    expect(screen.getByRole("form", { name: "Filter competitor findings" })).toHaveAttribute(
+    expect(screen.getByRole("heading", { name: "Recent updates" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Recent scans" })).toBeInTheDocument();
+    expect(screen.getByRole("form", { name: "Filter competitor updates" })).toHaveAttribute(
       "action",
       "/findings",
     );

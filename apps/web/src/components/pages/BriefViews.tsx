@@ -33,8 +33,10 @@ export function BriefsListView() {
     <section className="space-y-6">
       <header>
         <p className="eyebrow">Executive intelligence</p>
-        <h1 className="mt-1 text-4xl font-semibold">Weekly briefs</h1>
-        <p className="mt-2 text-slate-600">Validated summaries grounded in accepted findings.</p>
+        <h1 className="mt-1 text-4xl font-semibold">Weekly digest</h1>
+        <p className="mt-2 text-slate-600">
+          Your week in one page, backed by the updates behind it.
+        </p>
       </header>
       {query.isPending ? <LoadingState label="Loading weekly briefs…" rows={4} /> : null}
       {query.isError ? (
@@ -43,7 +45,7 @@ export function BriefsListView() {
         </p>
       ) : null}
       {query.data?.items.length === 0 ? (
-        <p className="empty-state p-8 text-center">No weekly briefs yet.</p>
+        <p className="empty-state p-8 text-center">No weekly digest yet.</p>
       ) : null}
       {query.data?.items.length ? (
         <ul className="space-y-4">
@@ -116,7 +118,7 @@ export function BriefDetailView({ briefId }: { briefId: string }) {
                     className="mt-1 inline-block font-medium text-blue-700 hover:underline"
                     href={`/findings/${reference.finding_id}`}
                   >
-                    View finding and evidence
+                    View the update and its evidence
                   </Link>
                 </li>
               ))}

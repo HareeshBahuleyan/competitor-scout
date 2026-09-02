@@ -2,9 +2,11 @@
 
 import { Button } from "@heroui/react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import { type FormEvent, useState } from "react";
 
 import { LoadingState } from "@/components/ui/LoadingState";
+import { browserTimezone, canonicalTimezone, TimezoneSelect } from "@/components/ui/TimezoneSelect";
 import { apiGetClient, apiMutate } from "@/lib/api";
 import { meSchema, settingsSchema, usageSummarySchema } from "@/lib/schemas";
 
@@ -40,6 +42,9 @@ export function SettingsView() {
     queryKey: ["usage-summary"],
     queryFn: () => apiGetClient("/api/v1/usage/summary", usageSummarySchema),
   });
+
+  const detectedTimezone = browserTimezone();
+  const detectedCanonical = detectedTimezone ? canonicalTimezone(detectedTimezone) : null;
 
   const resolvedDisplayName = displayName ?? settings.data?.display_name ?? "";
   const resolvedTimezone = timezone ?? settings.data?.timezone ?? "";
@@ -81,7 +86,7 @@ export function SettingsView() {
       return;
     }
     if (!validIanaTimezone(resolvedTimezone)) {
-      setValidationError("Enter a valid IANA timezone, such as Europe/Berlin or America/New_York.");
+      setValidationError("Choose a timezone from the list.");
       return;
     }
     setValidationError(null);
@@ -125,21 +130,23 @@ export function SettingsView() {
               value={resolvedDisplayName}
             />
           </label>
-          <label className="block text-sm font-medium">
-            Timezone
-            <input
-              aria-describedby="timezone-help"
-              className="mt-1 block min-h-10 w-full rounded-xl border px-3 py-2"
-              maxLength={64}
-              onChange={(event) => setTimezone(event.target.value)}
-              required
-              type="text"
-              value={resolvedTimezone}
-            />
-          </label>
-          <p className="text-sm text-slate-500" id="timezone-help">
-            Use an IANA timezone, for example Europe/Berlin.
-          </p>
+          <TimezoneSelect
+            action={
+              detectedTimezone && canonicalTimezone(resolvedTimezone) !== detectedCanonical ? (
+                <button
+                  className="section-link"
+                  onClick={() => setTimezone(detectedTimezone)}
+                  type="button"
+                >
+                  Use my current region
+                </button>
+              ) : null
+            }
+            description="Pick your region and nearest city. Scans and run times follow it."
+            label="Timezone"
+            onChange={setTimezone}
+            value={resolvedTimezone}
+          />
         </section>
 
         <section
@@ -229,6 +236,25 @@ export function SettingsView() {
             No usage has been recorded yet.
           </p>
         )}
+      </section>
+
+      <section aria-labelledby="advanced-heading" className="space-y-3">
+        <div>
+          <p className="eyebrow">Advanced</p>
+          <h2 className="mt-1 text-xl font-semibold" id="advanced-heading">
+            Troubleshooting
+          </h2>
+        </div>
+        <div className="surface max-w-2xl space-y-2 p-6">
+          <h3 className="font-semibold">Scan activity</h3>
+          <p className="text-sm text-slate-600">
+            Execution history for every scan, including per-task detail and audit status. Open this
+            when an expected update is missing or a scan reports a problem.
+          </p>
+          <Link className="section-link inline-block" href="/runs">
+            View scan activity
+          </Link>
+        </div>
       </section>
     </section>
   );

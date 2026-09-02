@@ -1,4 +1,5 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BriefDetailView, BriefsListView } from "@/components/pages/BriefViews";
@@ -8,6 +9,7 @@ import { apiGetClient, apiMutate } from "@/lib/api";
 import { renderWithQuery } from "../query-test-utils";
 
 vi.mock("@/lib/api", () => ({ apiGetClient: vi.fn(), apiMutate: vi.fn() }));
+
 const replace = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
 
@@ -159,8 +161,8 @@ describe("dashboard", () => {
     expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.getByText("Intelligence overview")).toBeInTheDocument();
     expect(screen.getByText("Active monitors")).toBeInTheDocument();
-    expect(screen.getByText("Material signals")).toBeInTheDocument();
-    expect(screen.getByText("Runs to review")).toBeInTheDocument();
+    expect(screen.getByText("Material updates")).toBeInTheDocument();
+    expect(screen.getByText("Scans to review")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Add competitor" })).toHaveAttribute(
       "href",
       "/competitors/new",
@@ -233,7 +235,7 @@ describe("weekly briefs", () => {
     renderWithQuery(<BriefDetailView briefId={brief.id} />);
     expect(await screen.findByRole("heading", { name: "Pricing" })).toBeInTheDocument();
     expect(screen.getByText("The annual tier is now public.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "View finding and evidence" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "View the update and its evidence" })).toHaveAttribute(
       "href",
       `/findings/${finding.id}`,
     );
@@ -257,7 +259,7 @@ describe("weekly briefs", () => {
 
     vi.mocked(apiGetClient).mockResolvedValueOnce({ items: [], next_cursor: null } as never);
     const empty = renderWithQuery(<BriefsListView />);
-    expect(await screen.findByText("No weekly briefs yet.")).toBeInTheDocument();
+    expect(await screen.findByText("No weekly digest yet.")).toBeInTheDocument();
     empty.unmount();
 
     vi.mocked(apiGetClient).mockRejectedValueOnce(new Error("briefs unavailable"));
@@ -284,14 +286,17 @@ describe("settings and usage", () => {
     expect(screen.getByRole("heading", { name: "Profile" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Default schedule" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Usage" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Timezone")).toHaveValue("Europe/Berlin");
+    const timezone = screen.getByRole("button", { name: /Timezone/ });
+    expect(timezone).toHaveTextContent("Berlin — Central European Time");
     expect(screen.getByLabelText("Default daily run time")).toHaveValue("08:30");
     expect(screen.getByText("competitor-scout-main")).toBeInTheDocument();
     expect(screen.getAllByText("Unknown")).toHaveLength(2);
     expect(screen.queryByLabelText(/model|budget|tool/i)).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "New Founder" } });
-    fireEvent.change(screen.getByLabelText("Timezone"), { target: { value: "UTC" } });
+    const user = userEvent.setup();
+    await user.click(timezone);
+    await user.click(screen.getByRole("option", { name: /Coordinated Universal Time/ }));
     fireEvent.change(screen.getByLabelText("Default daily run time"), {
       target: { value: "09:15" },
     });
@@ -300,7 +305,11 @@ describe("settings and usage", () => {
       expect(apiMutate).toHaveBeenCalledWith(
         "/api/v1/settings",
         {
-          body: { display_name: "New Founder", timezone: "UTC", default_daily_time: "09:15:00" },
+          body: {
+            display_name: "New Founder",
+            timezone: "Etc/UTC",
+            default_daily_time: "09:15:00",
+          },
           csrfToken: "csrf-token",
           method: "PATCH",
         },
@@ -310,7 +319,7 @@ describe("settings and usage", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Settings saved");
   });
 
-  it("rejects invalid IANA timezones and disables submission while pending", async () => {
+  it("only offers real timezones grouped by region and disables submission while pending", async () => {
     mockSettings();
     let settle!: (value: typeof settings) => void;
     vi.mocked(apiMutate).mockReturnValue(
@@ -318,14 +327,33 @@ describe("settings and usage", () => {
         settle = resolve;
       }) as never,
     );
+    const user = userEvent.setup();
     renderWithQuery(<SettingsView />);
-    const timezone = await screen.findByLabelText("Timezone");
-    fireEvent.change(timezone, { target: { value: "Mars/Olympus" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("valid IANA timezone");
-    expect(apiMutate).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole("button", { name: /Timezone/ }));
 
-    fireEvent.change(timezone, { target: { value: "America/New_York" } });
+    const labels = () => screen.getAllByRole("option").map((option) => option.textContent ?? "");
+    // The default list stays short; the full database is one click away.
+    expect(labels().length).toBeLessThan(50);
+    expect(labels().join("|")).not.toContain("Colombo");
+    expect(screen.getAllByRole("group").map((group) => group.textContent?.slice(0, 20))).toEqual([
+      expect.stringContaining("Universal"),
+      expect.stringContaining("Americas"),
+      expect.stringContaining("Europe"),
+      expect.stringContaining("Africa & Middle East"),
+      expect.stringContaining("Asia"),
+      expect.stringContaining("Pacific"),
+    ]);
+    await user.keyboard("{Escape}");
+
+    await user.click(screen.getByRole("button", { name: "Show all timezones" }));
+    await user.click(screen.getByRole("button", { name: /Timezone/ }));
+    expect(labels().length).toBeGreaterThan(300);
+    expect(labels().join("|")).toContain("Colombo");
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Show common timezones" }));
+
+    await user.click(screen.getByRole("button", { name: /Timezone/ }));
+    await user.click(screen.getByRole("option", { name: /New York — Eastern Time/ }));
     fireEvent.click(screen.getByRole("button", { name: "Save settings" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled());
     await act(async () => settle(settings));

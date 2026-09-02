@@ -362,8 +362,7 @@ test("renders a grounded weekly brief and links every reference", async ({ page 
 
   await expect(page.getByRole("heading", { name: "Pricing" })).toBeVisible();
   await expect(page.getByText("The annual plan is now public.")).toBeVisible();
-  await expect(page.getByRole("link", { name: "View finding and evidence" })).toHaveAttribute(
-    "href",
-    `/findings/${findingId}`,
-  );
+  await expect(
+    page.getByRole("link", { name: "View the update and its evidence" }),
+  ).toHaveAttribute("href", `/findings/${findingId}`);
 });
