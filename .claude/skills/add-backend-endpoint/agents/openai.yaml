@@ -1,4 +1,0 @@
-interface:
-  display_name: "Add Backend Endpoint"
-  short_description: "Add safe, user-scoped FastAPI endpoints"
-  default_prompt: "Use $add-backend-endpoint to implement a new API endpoint in Competitor Scout."
