@@ -285,6 +285,8 @@ class OtariClient:
         )
         if status == 422 and OtariClient._is_tool_iteration_limit(response):
             code = "otari_tool_iteration_limit"
+        if status == 403 and OtariClient._is_budget_exceeded(response):
+            code = "otari_budget_exceeded"
         return OtariError(
             code,
             retryable=retryable,
@@ -305,6 +307,21 @@ class OtariClient:
             return False
         prefix = "Exceeded max_tool_iterations="
         return detail.startswith(prefix) and detail.removeprefix(prefix).isdigit()
+
+    @staticmethod
+    def _is_budget_exceeded(response: httpx.Response) -> bool:
+        try:
+            document = response.json()
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return False
+        if not isinstance(document, dict):
+            return False
+        detail = document.get("detail")
+        if not isinstance(detail, str):
+            return False
+        subjects = ("Organization ", "Workspace ", "Member ", "API key ", "Provider key ")
+        dimensions = (" USD budget exceeded", " token budget exceeded", " request budget exceeded")
+        return detail.startswith(subjects) and any(marker in detail for marker in dimensions)
 
     @staticmethod
     def _response_document(response: httpx.Response) -> dict[str, Any]:

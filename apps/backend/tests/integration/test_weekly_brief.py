@@ -453,7 +453,7 @@ async def test_weekly_cost_preflight_stops_before_otari(brief_store) -> None:
         client=client,
         settings=configured,
         now=lambda: SCHEDULED,
-        cost_estimator=lambda _model, _tokens, _web: Decimal("0.20"),
+        cost_estimator=lambda _role: Decimal("0.20"),
     )
 
     assert await handler.handle(seeded.run_id) is ScoutRunStatus.PARTIAL

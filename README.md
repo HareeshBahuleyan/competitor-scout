@@ -39,6 +39,10 @@ Fill these in `.env` before starting anything; the API refuses to boot without t
 - `OTARI_AI_TOKEN` — any non-empty dummy value is fine for offline development,
   because the test suites inject fake Otari clients. Replace it only for an explicitly
   approved hosted smoke test.
+- `OTARI_MAIN_MODEL` and `OTARI_CHILD_MODEL` default to the shared
+  `general-mzai-then-openai-models` routing policy. The Otari workspace budget attached
+  to the real token is enforced remotely; the local run and daily ceilings remain an
+  additional safety layer.
 
 `.env` is gitignored. Leave `DATABASE_URL` pointing at `localhost:5432` — that value is
 used by host commands such as `alembic`; Compose overrides it to the `postgres` service

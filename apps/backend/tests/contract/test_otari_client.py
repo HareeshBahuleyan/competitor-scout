@@ -180,6 +180,38 @@ async def test_tool_iteration_limit_is_classified_without_exposing_response_body
 
 
 @pytest.mark.parametrize(
+    "detail",
+    [
+        "Workspace USD budget exceeded: $5.00 spent of $5.00 daily limit. "
+        "Contact your organization admin to raise the limit.",
+        "API key request budget exceeded. Contact your organization admin to raise the limit.",
+    ],
+)
+async def test_hosted_budget_exhaustion_is_classified_without_exposing_detail(
+    detail: str,
+) -> None:
+    async def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(403, json={"detail": detail, "response_body": "secret"})
+
+    async with OtariClient(settings(), transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(OtariError) as raised:
+            await client.structured_completion(
+                model="general-mzai-then-openai-models",
+                messages=[{"role": "user", "content": "Plan."}],
+                output_type=ScoutPlan,
+                session_label="run:budget",
+                max_completion_tokens=100,
+                deadline_seconds=5,
+            )
+
+    assert raised.value.code == "otari_budget_exceeded"
+    assert raised.value.retryable is False
+    assert raised.value.status_code == 403
+    assert detail not in str(raised.value)
+    assert "secret" not in str(raised.value)
+
+
+@pytest.mark.parametrize(
     ("exception", "code"),
     [
         (httpx.ReadTimeout("upstream timeout with hosted-ai-token"), "otari_timeout"),

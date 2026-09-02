@@ -50,6 +50,16 @@ def test_operational_defaults_are_bounded() -> None:
     assert settings.max_otari_concurrency == 8
 
 
+def test_default_otari_policy_routes_all_agent_roles(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OTARI_MAIN_MODEL")
+    monkeypatch.delenv("OTARI_CHILD_MODEL")
+
+    settings = Settings(_env_file=None, **valid_values())
+
+    assert settings.otari_main_model == "general-mzai-then-openai-models"
+    assert settings.otari_child_model == "general-mzai-then-openai-models"
+
+
 def test_otari_models_use_suffix_free_environment_names(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OTARI_MAIN_MODEL", "configured-main-model")
     monkeypatch.setenv("OTARI_CHILD_MODEL", "configured-child-model")

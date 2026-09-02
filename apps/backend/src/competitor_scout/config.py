@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     google_client_secret: SecretStr
     otari_base_url: AnyHttpUrl
     otari_ai_token: SecretStr = Field(min_length=1)
-    otari_main_model: str = "competitor-scout-main"
-    otari_child_model: str = "competitor-scout-child"
+    otari_main_model: str = "general-mzai-then-openai-models"
+    otari_child_model: str = "general-mzai-then-openai-models"
     otari_cost_lookup_attempts: int = Field(default=3, ge=1, le=10)
     otari_cost_lookup_delay_seconds: float = Field(default=0.25, gt=0, le=5)
 

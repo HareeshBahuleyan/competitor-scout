@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Literal
 
 from competitor_scout.config import Settings
+
+type CostEstimateRole = Literal["main", "child"]
 
 
 class ConfiguredCostEstimator:
@@ -13,12 +16,10 @@ class ConfiguredCostEstimator:
 
     def __call__(
         self,
-        model: str,
-        _max_completion_tokens: int,
-        _enable_web_search: bool,
+        role: CostEstimateRole,
     ) -> Decimal:
         return (
             self._settings.estimated_child_request_cost_usd
-            if model == self._settings.otari_child_model
+            if role == "child"
             else self._settings.estimated_main_request_cost_usd
         )
