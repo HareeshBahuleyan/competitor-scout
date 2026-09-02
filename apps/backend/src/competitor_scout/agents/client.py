@@ -117,15 +117,19 @@ class OtariClient:
         max_completion_tokens: int,
         deadline_seconds: float,
         enable_web_search: bool = False,
+        mcp_server_ids: list[str] | None = None,
         max_tool_iterations: int | None = None,
     ) -> tuple[T, OtariMetadata]:
         """Request a structured result.
 
         ``max_tool_iterations`` bounds the gateway's model/tool loop. It is not an exact
-        web-search-call cap, so the application must still enforce its own search budget.
+        tool-call cap, so the application must still enforce its own call budget.
+        ``enable_web_search`` and ``mcp_server_ids`` are mutually exclusive: Otari does
+        not allow combining ``otari_web_search`` with workspace MCP servers in one request.
         """
+        has_tool = enable_web_search or bool(mcp_server_ids)
         effective_tool_iterations = (
-            (2 if enable_web_search else 1) if max_tool_iterations is None else max_tool_iterations
+            (2 if has_tool else 1) if max_tool_iterations is None else max_tool_iterations
         )
         self._validate_request_bounds(
             model=model,
@@ -135,6 +139,7 @@ class OtariClient:
             deadline_seconds=deadline_seconds,
             max_tool_iterations=effective_tool_iterations,
             enable_web_search=enable_web_search,
+            mcp_server_ids=mcp_server_ids,
         )
         body: dict[str, object] = {
             "model": model,
@@ -150,14 +155,18 @@ class OtariClient:
                 },
             },
         }
-        if enable_web_search:
-            # Otari exposes managed web search as a function tool. The configured
-            # OpenAI GPT-5.6 models reject function tools on /v1/chat/completions
-            # unless reasoning_effort is explicitly "none".
+        if has_tool:
+            # Otari exposes managed web search and workspace MCP tools as function
+            # tools. The configured OpenAI GPT-5.6 models reject function tools on
+            # /v1/chat/completions unless reasoning_effort is explicitly "none".
             body["reasoning_effort"] = "none"
             body["parallel_tool_calls"] = False
             body["max_tool_iterations"] = effective_tool_iterations
-            body["tools"] = [{"type": "otari_web_search"}]
+            if enable_web_search:
+                body["tools"] = [{"type": "otari_web_search"}]
+            else:
+                # MCP is a top-level request field, not a `tools` entry.
+                body["mcp_server_ids"] = list(mcp_server_ids)
 
         try:
             async with asyncio.timeout(deadline_seconds):
@@ -253,6 +262,7 @@ class OtariClient:
         deadline_seconds: float,
         max_tool_iterations: int,
         enable_web_search: bool,
+        mcp_server_ids: list[str] | None,
     ) -> None:
         if not model or len(model) > 255:
             raise ValueError("model must contain at most 255 characters")
@@ -266,8 +276,12 @@ class OtariClient:
             raise ValueError("deadline_seconds is outside the allowed range")
         if not 1 <= max_tool_iterations <= 25:
             raise ValueError("max_tool_iterations is outside the allowed range")
-        if enable_web_search and max_tool_iterations < 2:
-            raise ValueError("web search requires at least 2 max_tool_iterations")
+        if enable_web_search and mcp_server_ids:
+            raise ValueError("enable_web_search and mcp_server_ids are mutually exclusive")
+        if mcp_server_ids is not None and len(mcp_server_ids) > 50:
+            raise ValueError("mcp_server_ids must contain at most 50 items")
+        if (enable_web_search or mcp_server_ids) and max_tool_iterations < 2:
+            raise ValueError("web search or MCP tools require at least 2 max_tool_iterations")
 
     @staticmethod
     def _http_error(response: httpx.Response) -> OtariError:

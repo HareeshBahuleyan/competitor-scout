@@ -663,6 +663,19 @@ class ScoutOrchestrator:
             await self._fail_task(task_id, "child_timeout")
             return _ChildOutcome(failed=True, unsettled_attempt=True)
 
+    def _child_tool_selection(self, kind: ChildTaskKind) -> tuple[bool, list[str] | None, str]:
+        """Pick the one tool a child task may use.
+
+        Otari refuses to combine ``otari_web_search`` with MCP servers in the same
+        request, so a task gets exactly one. A first-party review has a fixed set
+        of approved URLs to fetch, which is FireCrawl's strength when it is
+        configured; news discovery still needs an open web search.
+        """
+        firecrawl_server_id = self._settings.otari_firecrawl_mcp_server_id
+        if kind is ChildTaskKind.FIRST_PARTY_SOURCE_REVIEW and firecrawl_server_id:
+            return False, [firecrawl_server_id], "firecrawl"
+        return True, None, "otari_web_search"
+
     async def _execute_child_within_deadline(
         self,
         context: _RunContext,
@@ -672,6 +685,7 @@ class ScoutOrchestrator:
     ) -> _ChildOutcome:
         metadata_records: list[OtariMetadata] = []
         unsettled = False
+        enable_web_search, mcp_server_ids, tool_name = self._child_tool_selection(planned.kind)
         deadline = asyncio.get_running_loop().time() + self._settings.child_deadline_seconds
         async with self._child_semaphore:
             for attempt in range(1, self._settings.max_child_retries + 2):
@@ -693,7 +707,8 @@ class ScoutOrchestrator:
                                 "primary_domain": context.competitor_domain,
                             },
                             "recent_duplicate_hints": list(context.recent_findings),
-                        }
+                        },
+                        tool_name=tool_name,
                     )
                     if self._estimated_tokens(messages) > self._settings.child_input_token_limit:
                         raise PlanValidationError("child_input_token_limit")
@@ -704,7 +719,8 @@ class ScoutOrchestrator:
                         session_label=scout_run_session_label(context.run_id),
                         max_completion_tokens=self._settings.child_output_token_limit,
                         deadline_seconds=self._settings.child_deadline_seconds,
-                        enable_web_search=True,
+                        enable_web_search=enable_web_search,
+                        mcp_server_ids=mcp_server_ids,
                         max_tool_iterations=tool_iteration_budget(planned.max_search_calls),
                     )
                     metadata_records.append(metadata)

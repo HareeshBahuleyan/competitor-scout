@@ -14,11 +14,19 @@ scope. Report only claims supported by direct quotations and source URLs. If the
 evidence is insufficient, return no claim rather than guessing.
 """.strip()
 
-_TOOL_SCOPE_POLICY = (
-    "Remain within your assigned tool scope. Use only tools explicitly declared "
-    "for this request; never request browser, code execution, filesystem, mutation, "
-    "or MCP capabilities."
-)
+
+def _tool_scope_policy(declared_tool: str | None) -> str:
+    if declared_tool is None:
+        return (
+            "Remain within your assigned tool scope. No tool is declared for this "
+            "request; never request browser, code execution, filesystem, mutation, "
+            "or MCP capabilities."
+        )
+    return (
+        f"Remain within your assigned tool scope. The only tool declared for this "
+        f"request is {declared_tool}. Never request browser, code execution, "
+        "filesystem, mutation, or any other MCP capability."
+    )
 
 FINDING_CATEGORY_GUIDANCE = "\n".join(
     [
@@ -79,12 +87,17 @@ def _json_data(value: object) -> str:
     )
 
 
-def _messages(payload: object, instruction: str) -> list[dict[str, str]]:
+def _messages(
+    payload: object,
+    instruction: str,
+    *,
+    declared_tool: str | None = None,
+) -> list[dict[str, str]]:
     system = "\n\n".join(
         (
             UNTRUSTED_SOURCE_POLICY,
             f"Prompt version: {PROMPT_VERSION}.",
-            _TOOL_SCOPE_POLICY,
+            _tool_scope_policy(declared_tool),
             instruction,
         )
     )
@@ -109,7 +122,7 @@ def planning_messages(context: object) -> list[dict[str, str]]:
     )
 
 
-def child_messages(task: object) -> list[dict[str, str]]:
+def child_messages(task: object, *, tool_name: str = "otari_web_search") -> list[dict[str, str]]:
     return _messages(
         task,
         (
@@ -120,8 +133,9 @@ def child_messages(task: object) -> list[dict[str, str]]:
             "source_type (first_party|news), quoted_text (20-5000 chars), "
             "normalized_claim (1-1000 chars), confidence (0-1), "
             "and optional published_at/limitations.\n"
-            "Web search is allowed only when declared and within the task and search budget."
+            f"The declared {tool_name} tool is allowed only within the task and call budget."
         ),
+        declared_tool=tool_name,
     )
 
 

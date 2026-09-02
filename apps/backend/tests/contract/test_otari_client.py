@@ -111,6 +111,45 @@ async def test_omits_optional_tool_when_web_search_is_disabled() -> None:
     assert client.is_closed
 
 
+async def test_mcp_server_ids_are_sent_as_top_level_field_not_a_tool() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads((await request.aread()).decode())
+        assert body["mcp_server_ids"] == ["11111111-1111-1111-1111-111111111111"]
+        assert "tools" not in body
+        assert body["reasoning_effort"] == "none"
+        assert body["parallel_tool_calls"] is False
+        assert body["max_tool_iterations"] == 4
+        return httpx.Response(200, content=fixture_bytes())
+
+    async with OtariClient(settings(), transport=httpx.MockTransport(handler)) as client:
+        await client.structured_completion(
+            model="competitor-scout-child",
+            messages=[{"role": "user", "content": "Review the assigned pages."}],
+            output_type=ScoutPlan,
+            session_label="run:firecrawl",
+            max_completion_tokens=1024,
+            deadline_seconds=5,
+            mcp_server_ids=["11111111-1111-1111-1111-111111111111"],
+            max_tool_iterations=4,
+        )
+
+
+async def test_web_search_and_mcp_server_ids_are_mutually_exclusive() -> None:
+    transport = httpx.MockTransport(lambda _: httpx.Response(200))
+    async with OtariClient(settings(), transport=transport) as client:
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            await client.structured_completion(
+                model="competitor-scout-child",
+                messages=[{"role": "user", "content": "Review."}],
+                output_type=ScoutPlan,
+                session_label="run:conflict",
+                max_completion_tokens=1024,
+                deadline_seconds=5,
+                enable_web_search=True,
+                mcp_server_ids=["11111111-1111-1111-1111-111111111111"],
+            )
+
+
 @pytest.mark.parametrize(
     ("status", "code", "retryable"),
     [

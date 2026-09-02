@@ -535,6 +535,56 @@ async def test_first_party_child_search_stays_within_approved_scope(daily_store)
     assert evidence_urls == ["https://acme.example/pricing"]
 
 
+async def test_first_party_child_uses_firecrawl_mcp_when_configured(daily_store) -> None:
+    sessions = daily_store
+    _user_id, _competitor_id, run_id = await seed_daily_run(sessions)
+    fake = FakeOtari(task_count=1)
+    fake.plan = ScoutPlan.model_validate(
+        {
+            "tasks": [
+                {
+                    "kind": "first_party_source_review",
+                    "objective": "Review approved source 0",
+                    "source_urls": ["https://acme.example/pricing"],
+                    "search_query": None,
+                    "expected_category": "pricing",
+                    "max_search_calls": 1,
+                    "completion_criteria": "Return directly quoted evidence or none",
+                }
+            ]
+        },
+        strict=False,
+    )
+    configured = settings(otari_firecrawl_mcp_server_id="11111111-1111-1111-1111-111111111111")
+    orchestrator = await make_orchestrator(sessions, fake, configured)
+
+    status = await orchestrator.execute_daily_run(run_id)
+
+    child_call = next(call for call in fake.calls if call["output_type"] is ChildTaskResult)
+    child_system_prompt = child_call["messages"][0]["content"]
+    assert status is ScoutRunStatus.COMPLETED
+    assert child_call["enable_web_search"] is False
+    assert child_call["mcp_server_ids"] == ["11111111-1111-1111-1111-111111111111"]
+    assert "firecrawl" in child_system_prompt
+
+
+async def test_news_discovery_child_keeps_web_search_when_firecrawl_configured(
+    daily_store,
+) -> None:
+    sessions = daily_store
+    _user_id, _competitor_id, run_id = await seed_daily_run(sessions)
+    fake = FakeOtari(task_count=1)
+    configured = settings(otari_firecrawl_mcp_server_id="11111111-1111-1111-1111-111111111111")
+    orchestrator = await make_orchestrator(sessions, fake, configured)
+
+    status = await orchestrator.execute_daily_run(run_id)
+
+    child_call = next(call for call in fake.calls if call["output_type"] is ChildTaskResult)
+    assert status is ScoutRunStatus.COMPLETED
+    assert child_call["enable_web_search"] is True
+    assert child_call["mcp_server_ids"] is None
+
+
 @pytest.mark.parametrize(
     ("fake_changes", "expected_code"),
     [

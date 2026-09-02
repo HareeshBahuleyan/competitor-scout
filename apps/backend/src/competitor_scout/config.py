@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     otari_child_model: str = "general-mzai-then-openai-models"
     otari_cost_lookup_attempts: int = Field(default=3, ge=1, le=10)
     otari_cost_lookup_delay_seconds: float = Field(default=0.25, gt=0, le=5)
+    otari_firecrawl_mcp_server_id: str | None = None
 
     max_active_users: int = Field(default=10, ge=1, le=100)
     max_active_competitors: int = Field(default=10, ge=1, le=100)
@@ -56,6 +57,11 @@ class Settings(BaseSettings):
     @field_validator("e2e_auth_secret", mode="before")
     @classmethod
     def empty_e2e_secret_is_unset(cls, value: object) -> object:
+        return None if value == "" else value
+
+    @field_validator("otari_firecrawl_mcp_server_id", mode="before")
+    @classmethod
+    def empty_firecrawl_server_id_is_unset(cls, value: object) -> object:
         return None if value == "" else value
 
     @model_validator(mode="after")
