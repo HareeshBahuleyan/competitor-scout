@@ -29,6 +29,8 @@ export function SettingsView() {
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [timezone, setTimezone] = useState<string | null>(null);
   const [defaultDailyTime, setDefaultDailyTime] = useState<string | null>(null);
+  const [emailFindings, setEmailFindings] = useState<boolean | null>(null);
+  const [emailWeeklyBrief, setEmailWeeklyBrief] = useState<boolean | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const me = useQuery({ queryKey: ["me"], queryFn: () => apiGetClient("/api/v1/me", meSchema) });
@@ -45,6 +47,9 @@ export function SettingsView() {
   const resolvedTimezone = timezone ?? settings.data?.timezone ?? "";
   const resolvedDefaultDailyTime =
     defaultDailyTime ?? settings.data?.default_daily_time.slice(0, 5) ?? "";
+  const resolvedEmailFindings = emailFindings ?? settings.data?.email_findings_enabled ?? false;
+  const resolvedEmailWeeklyBrief =
+    emailWeeklyBrief ?? settings.data?.email_weekly_brief_enabled ?? false;
 
   const update = useMutation({
     mutationFn: async () => {
@@ -55,6 +60,8 @@ export function SettingsView() {
           body: {
             default_daily_time: `${resolvedDefaultDailyTime}:00`,
             display_name: resolvedDisplayName.trim(),
+            email_findings_enabled: resolvedEmailFindings,
+            email_weekly_brief_enabled: resolvedEmailWeeklyBrief,
             timezone: resolvedTimezone,
           },
           csrfToken: me.data.csrf_token,
@@ -69,6 +76,8 @@ export function SettingsView() {
       setDisplayName(updated.display_name);
       setTimezone(updated.timezone);
       setDefaultDailyTime(updated.default_daily_time.slice(0, 5));
+      setEmailFindings(updated.email_findings_enabled);
+      setEmailWeeklyBrief(updated.email_weekly_brief_enabled);
       setSaved(true);
     },
   });
@@ -161,6 +170,57 @@ export function SettingsView() {
               type="time"
               value={resolvedDefaultDailyTime}
             />
+          </label>
+        </section>
+
+        <section
+          aria-labelledby="notifications-heading"
+          className="space-y-4 border-t border-slate-100 pt-6"
+        >
+          <div>
+            <h2 className="text-lg font-semibold" id="notifications-heading">
+              Notifications
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Choose which new intelligence is delivered to {me.data.email}.
+            </p>
+          </div>
+          {!settings.data.email_delivery_available ? (
+            <p className="rounded-lg bg-slate-100 p-3 text-sm text-slate-600" role="status">
+              Email delivery is not available for this workspace yet.
+            </p>
+          ) : null}
+          <label className="flex items-start gap-3 text-sm">
+            <input
+              aria-label="Important finding emails"
+              checked={resolvedEmailFindings}
+              className="mt-1 size-4"
+              disabled={!settings.data.email_delivery_available || update.isPending}
+              onChange={(event) => setEmailFindings(event.target.checked)}
+              type="checkbox"
+            />
+            <span>
+              <span className="block font-medium">Important finding emails</span>
+              <span className="text-slate-500">
+                Email me when a new high or critical competitor change is published.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-3 text-sm">
+            <input
+              aria-label="Weekly brief emails"
+              checked={resolvedEmailWeeklyBrief}
+              className="mt-1 size-4"
+              disabled={!settings.data.email_delivery_available || update.isPending}
+              onChange={(event) => setEmailWeeklyBrief(event.target.checked)}
+              type="checkbox"
+            />
+            <span>
+              <span className="block font-medium">Weekly brief emails</span>
+              <span className="text-slate-500">
+                Email the weekly brief, including weeks with no material changes.
+              </span>
+            </span>
           </label>
         </section>
         {validationError ? (

@@ -13,6 +13,7 @@ from competitor_scout.models.intelligence import (
     UsageEvent,
 )
 from competitor_scout.models.jobs import Job
+from competitor_scout.models.notifications import NotificationOutbox
 
 __all__ = [
     "AgentTask",
@@ -22,6 +23,7 @@ __all__ = [
     "FindingEvidence",
     "Job",
     "MonitoredSource",
+    "NotificationOutbox",
     "OAuthIdentity",
     "ScoutRun",
     "Session",

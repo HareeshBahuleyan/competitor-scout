@@ -16,21 +16,39 @@ class Recorder:
         self.run_ids.append(run_id)
 
 
+class NotificationRecorder:
+    def __init__(self) -> None:
+        self.outbox_ids: list[uuid.UUID] = []
+
+    async def handle(self, *, outbox_id: uuid.UUID) -> None:
+        self.outbox_ids.append(outbox_id)
+
+
 async def test_worker_registers_weekly_brief_handler() -> None:
     run_id = uuid.uuid4()
     daily = Recorder()
     discovery = Recorder()
     weekly = Recorder()
+    notifications = NotificationRecorder()
     handlers = build_handlers(
         daily_orchestrator=daily,  # type: ignore[arg-type]
         discovery_handler=discovery,  # type: ignore[arg-type]
         weekly_handler=weekly,  # type: ignore[arg-type]
+        notification_handler=notifications,  # type: ignore[arg-type]
     )
 
     await handlers["weekly_brief"]({"run_id": str(run_id)})
+    await handlers["email_notification"]({"outbox_id": str(run_id)})
 
     assert weekly.run_ids == [run_id]
-    assert set(handlers) == {"daily_scout", "manual_scout", "source_discovery", "weekly_brief"}
+    assert notifications.outbox_ids == [run_id]
+    assert set(handlers) == {
+        "daily_scout",
+        "manual_scout",
+        "source_discovery",
+        "weekly_brief",
+        "email_notification",
+    }
 
 
 async def test_scheduler_loop_schedules_daily_and_weekly_work_each_tick(monkeypatch) -> None:

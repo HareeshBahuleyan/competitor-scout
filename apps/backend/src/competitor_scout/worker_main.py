@@ -15,9 +15,11 @@ from competitor_scout.config import Settings, get_settings
 from competitor_scout.db import SessionFactory, create_engine, create_session_factory
 from competitor_scout.jobs.executor import JobExecutor, JobHandler
 from competitor_scout.jobs.handlers import SourceDiscoveryHandler
+from competitor_scout.jobs.notifications import NotificationHandler
 from competitor_scout.jobs.repository import JobRepository
 from competitor_scout.jobs.scheduler import schedule_due_daily_runs, schedule_due_weekly_briefs
 from competitor_scout.jobs.weekly_brief import WeeklyBriefHandler
+from competitor_scout.notifications.email import DisabledEmailSender, ResendEmailSender
 from competitor_scout.security.urls import validate_public_https_url
 from competitor_scout.services.findings import FindingPublicationService
 
@@ -63,6 +65,7 @@ def build_handlers(
     daily_orchestrator: ScoutOrchestrator,
     discovery_handler: SourceDiscoveryHandler,
     weekly_handler: WeeklyBriefHandler,
+    notification_handler: NotificationHandler,
 ) -> dict[str, JobHandler]:
     async def daily(payload: dict[str, object]) -> None:
         await daily_orchestrator.execute_daily_run(_run_id(payload))
@@ -73,11 +76,22 @@ def build_handlers(
     async def weekly(payload: dict[str, object]) -> None:
         await weekly_handler.handle(run_id=_run_id(payload))
 
+    async def notification(payload: dict[str, object]) -> None:
+        value = payload.get("outbox_id")
+        if not isinstance(value, str):
+            raise ValueError("job payload has no outbox_id")
+        try:
+            outbox_id = uuid.UUID(value)
+        except ValueError as error:
+            raise ValueError("job payload outbox_id is invalid") from error
+        await notification_handler.handle(outbox_id=outbox_id)
+
     return {
         "daily_scout": daily,
         "manual_scout": daily,
         "source_discovery": discovery,
         "weekly_brief": weekly,
+        "email_notification": notification,
     }
 
 
@@ -91,6 +105,7 @@ async def worker_resources(
     publisher = FindingPublicationService(
         sessions,
         minimum_confidence=Decimal(str(settings.finding_confidence_threshold)),
+        email_delivery_available=settings.email_delivery_enabled,
     )
     cost_estimator = ConfiguredCostEstimator(settings)
     daily_orchestrator = ScoutOrchestrator(
@@ -117,6 +132,20 @@ async def worker_resources(
         settings=settings,
         cost_estimator=cost_estimator,
     )
+    if settings.email_delivery_enabled:
+        if settings.resend_api_key is None or settings.notification_email_from is None:
+            raise RuntimeError("email delivery configuration is incomplete")
+        email_sender = ResendEmailSender(
+            api_key=settings.resend_api_key.get_secret_value(),
+            sender=settings.notification_email_from,
+        )
+    else:
+        email_sender = DisabledEmailSender()
+    notification_handler = NotificationHandler(
+        sessions,
+        sender=email_sender,
+        public_base_url=str(settings.public_base_url),
+    )
     repository = JobRepository(sessions)
     executor = JobExecutor(
         repository=repository,
@@ -124,6 +153,7 @@ async def worker_resources(
             daily_orchestrator=daily_orchestrator,
             discovery_handler=discovery_handler,
             weekly_handler=weekly_handler,
+            notification_handler=notification_handler,
         ),
         lease_seconds=LEASE_SECONDS,
         renewal_interval_seconds=LEASE_RENEWAL_SECONDS,
@@ -131,6 +161,7 @@ async def worker_resources(
     try:
         yield sessions, executor
     finally:
+        await email_sender.aclose()
         await client.aclose()
         await engine.dispose()
 

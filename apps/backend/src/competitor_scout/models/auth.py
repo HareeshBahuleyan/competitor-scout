@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, time
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Time, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Time, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
@@ -30,6 +30,12 @@ class User(Base):
         Time(timezone=False),
         default=time(hour=8),
         server_default="08:00:00",
+    )
+    email_findings_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    email_weekly_brief_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

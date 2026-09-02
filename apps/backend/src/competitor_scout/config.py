@@ -49,9 +49,12 @@ class Settings(BaseSettings):
     estimated_main_request_cost_usd: Decimal = Field(default=Decimal("0.20"), gt=0)
     estimated_child_request_cost_usd: Decimal = Field(default=Decimal("0.10"), gt=0)
     finding_confidence_threshold: float = Field(default=0.70, ge=0, le=1)
+    email_delivery_enabled: bool = False
+    resend_api_key: SecretStr | None = None
+    notification_email_from: str | None = None
     e2e_auth_secret: SecretStr | None = None
 
-    @field_validator("e2e_auth_secret", mode="before")
+    @field_validator("e2e_auth_secret", "resend_api_key", "notification_email_from", mode="before")
     @classmethod
     def empty_e2e_secret_is_unset(cls, value: object) -> object:
         return None if value == "" else value
@@ -60,6 +63,17 @@ class Settings(BaseSettings):
     def reject_e2e_secret_outside_test(self) -> Self:
         if self.e2e_auth_secret is not None and self.environment != "test":
             raise ValueError("E2E_AUTH_SECRET may only be set when ENVIRONMENT=test")
+        return self
+
+    @model_validator(mode="after")
+    def require_email_transport_configuration(self) -> Self:
+        if self.email_delivery_enabled and (
+            self.resend_api_key is None or self.notification_email_from is None
+        ):
+            raise ValueError(
+                "RESEND_API_KEY and NOTIFICATION_EMAIL_FROM are required when "
+                "email delivery is enabled"
+            )
         return self
 
 

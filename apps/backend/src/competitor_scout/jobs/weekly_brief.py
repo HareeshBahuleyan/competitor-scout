@@ -31,6 +31,7 @@ from competitor_scout.models.intelligence import (
     UsageEvent,
 )
 from competitor_scout.schemas.briefs import WeeklyBriefResult, empty_weekly_brief
+from competitor_scout.services.notifications import brief_email_key, enqueue_email_notification
 
 MAX_BRIEF_FINDINGS = 100
 MAX_EVIDENCE_PER_FINDING = 10
@@ -204,18 +205,19 @@ class WeeklyBriefHandler:
             if not findings:
                 run.status = ScoutRunStatus.SYNTHESIZING
                 result = empty_weekly_brief()
-                session.add(
-                    WeeklyBrief(
-                        user_id=run.user_id,
-                        scout_run_id=run.id,
-                        period_start=period.period_start,
-                        period_end=period.period_end,
-                        title=result.title,
-                        executive_summary=result.executive_summary,
-                        sections=[],
-                        published_at=now,
-                    )
+                brief = WeeklyBrief(
+                    user_id=run.user_id,
+                    scout_run_id=run.id,
+                    period_start=period.period_start,
+                    period_end=period.period_end,
+                    title=result.title,
+                    executive_summary=result.executive_summary,
+                    sections=[],
+                    published_at=now,
                 )
+                session.add(brief)
+                await session.flush()
+                await self._enqueue_notification(session, user, brief)
                 run.status = ScoutRunStatus.COMPLETED
                 run.completed_at = now
                 return run.status
@@ -354,10 +356,11 @@ class WeeklyBriefHandler:
             task = await session.get(AgentTask, context.task_id)
             if task is None:
                 raise RuntimeError("weekly brief task disappeared")
-            await session.execute(
+            brief_id = uuid.uuid4()
+            inserted_id = await session.scalar(
                 insert(WeeklyBrief)
                 .values(
-                    id=uuid.uuid4(),
+                    id=brief_id,
                     user_id=context.user_id,
                     scout_run_id=context.run_id,
                     period_start=context.period.period_start,
@@ -368,7 +371,14 @@ class WeeklyBriefHandler:
                     published_at=completed_at,
                 )
                 .on_conflict_do_nothing(constraint="uq_weekly_briefs_user_period")
+                .returning(WeeklyBrief.id)
             )
+            if inserted_id is not None:
+                user = await session.get(User, context.user_id)
+                if user is not None:
+                    brief = await session.get(WeeklyBrief, inserted_id)
+                    if brief is not None:
+                        await self._enqueue_notification(session, user, brief)
             self._apply_metadata(run, task, metadata, completed_at=completed_at)
             task.status = AgentTaskStatus.SUCCEEDED
             task.validated_output = result.model_dump(mode="json")
@@ -376,6 +386,29 @@ class WeeklyBriefHandler:
             run.completed_at = completed_at
             await self._record_usage(session, run, task, metadata, completed_at)
             return run.status
+
+    async def _enqueue_notification(
+        self,
+        session,
+        user: User,
+        brief: WeeklyBrief,
+    ) -> None:
+        if not self._settings.email_delivery_enabled or not user.email_weekly_brief_enabled:
+            return
+        await enqueue_email_notification(
+            session,
+            user_id=user.id,
+            notification_type="weekly_brief_email",
+            deduplication_key=brief_email_key(brief.id),
+            payload={
+                "brief_id": str(brief.id),
+                "title": brief.title,
+                "executive_summary": brief.executive_summary,
+                "period_start": brief.period_start.isoformat(),
+                "period_end": brief.period_end.isoformat(),
+            },
+            available_at=brief.published_at,
+        )
 
     async def _fail(
         self,

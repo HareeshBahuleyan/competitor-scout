@@ -276,6 +276,9 @@ export const settingsSchema = z.object({
   display_name: z.string().min(1).max(200),
   timezone: z.string().min(1).max(64),
   default_daily_time: localTimeSchema,
+  email_findings_enabled: z.boolean(),
+  email_weekly_brief_enabled: z.boolean(),
+  email_delivery_available: z.boolean(),
 });
 
 export type UserSettings = z.infer<typeof settingsSchema>;

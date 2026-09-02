@@ -258,18 +258,27 @@ describe("brief, settings, and aggregate usage schemas", () => {
         display_name: "Founder",
         timezone: "Europe/Berlin",
         default_daily_time: "08:30:00",
+        email_findings_enabled: false,
+        email_weekly_brief_enabled: true,
+        email_delivery_available: true,
         main_model: "must-not-reach-the-view",
       }),
     ).toEqual({
       display_name: "Founder",
       timezone: "Europe/Berlin",
       default_daily_time: "08:30:00",
+      email_findings_enabled: false,
+      email_weekly_brief_enabled: true,
+      email_delivery_available: true,
     });
     expect(() =>
       settingsSchema.parse({
         display_name: "Founder",
         timezone: "Europe/Berlin",
         default_daily_time: "8:30",
+        email_findings_enabled: false,
+        email_weekly_brief_enabled: false,
+        email_delivery_available: true,
       }),
     ).toThrow(z.ZodError);
 

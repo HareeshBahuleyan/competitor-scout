@@ -34,6 +34,7 @@ from competitor_scout.models.intelligence import (
     UsageEvent,
 )
 from competitor_scout.models.jobs import Job
+from competitor_scout.models.notifications import NotificationOutbox
 from competitor_scout.schemas.briefs import (
     EMPTY_BRIEF_EXECUTIVE_SUMMARY,
     EMPTY_BRIEF_TITLE,
@@ -136,7 +137,7 @@ async def test_weekly_scheduler_uses_monday_0800_local_once_per_period_and_skips
     assert jobs[0].payload == {"run_id": str(eligible_runs[0].id)}
 
 
-def settings() -> Settings:
+def settings(*, email_delivery_enabled: bool = False) -> Settings:
     return Settings(
         environment="test",
         database_url="postgresql+asyncpg://test:test@localhost/test",
@@ -147,6 +148,9 @@ def settings() -> Settings:
         google_client_secret="google-secret",
         otari_base_url="https://otari.invalid",
         otari_ai_token="dummy-never-live",
+        email_delivery_enabled=email_delivery_enabled,
+        resend_api_key="test-resend-key" if email_delivery_enabled else None,
+        notification_email_from="scout@example.com" if email_delivery_enabled else None,
     )
 
 
@@ -173,11 +177,15 @@ async def seed_brief_run(
     timezone: str = "Europe/Berlin",
     published_times: tuple[datetime, ...] = (),
     competitor_status: CompetitorStatus = CompetitorStatus.ACTIVE,
+    email_weekly_brief_enabled: bool = False,
 ) -> SeededBriefRun:
     async with sessions.begin() as session:
         stem = uuid.uuid4().hex
         user = User(
-            email=f"brief-{stem}@example.com", display_name="Brief Owner", timezone=timezone
+            email=f"brief-{stem}@example.com",
+            display_name="Brief Owner",
+            timezone=timezone,
+            email_weekly_brief_enabled=email_weekly_brief_enabled,
         )
         competitor = Competitor(
             user=user,
@@ -526,6 +534,43 @@ async def test_empty_week_is_deterministic_and_never_calls_otari(brief_store) ->
             )
             == 0
         )
+
+
+async def test_empty_week_enqueues_one_opt_in_email_notification(brief_store) -> None:
+    seeded = await seed_brief_run(
+        brief_store,
+        timezone="UTC",
+        email_weekly_brief_enabled=True,
+    )
+    handler = WeeklyBriefHandler(
+        brief_store,
+        client=NeverOtari(),
+        settings=settings(email_delivery_enabled=True),
+        now=lambda: SCHEDULED,
+    )
+
+    assert await handler.handle(seeded.run_id) is ScoutRunStatus.COMPLETED
+    assert await handler.handle(seeded.run_id) is ScoutRunStatus.COMPLETED
+    async with brief_store() as session:
+        outboxes = list(
+            (
+                await session.scalars(
+                    select(NotificationOutbox).where(NotificationOutbox.user_id == seeded.user_id)
+                )
+            ).all()
+        )
+        assert len(outboxes) == 1
+        assert outboxes[0].payload["title"] == EMPTY_BRIEF_TITLE
+        jobs = list(
+            (
+                await session.scalars(
+                    select(Job).where(
+                        Job.deduplication_key.like(f"email_notification:{outboxes[0].id}:%")
+                    )
+                )
+            ).all()
+        )
+        assert len(jobs) == 1
 
 
 async def test_brief_api_is_cursor_paginated_and_user_scoped(brief_store) -> None:

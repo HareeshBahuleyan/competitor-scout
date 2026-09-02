@@ -68,6 +68,9 @@ test("guides a new user through sources and the first scan", async ({ page }) =>
         display_name: "Founder",
         timezone: "Europe/Berlin",
         default_daily_time: "06:45:00",
+        email_findings_enabled: false,
+        email_weekly_brief_enabled: false,
+        email_delivery_available: false,
       },
     }),
   );
@@ -370,4 +373,47 @@ test("renders a grounded weekly brief and links every reference", async ({ page 
     "href",
     `/findings/${findingId}`,
   );
+});
+
+test("opts into important finding email and preserves the preference", async ({ page }) => {
+  await mockAuthenticatedUser(page);
+  let emailFindingsEnabled = false;
+  let patchBody: unknown;
+  await page.route("**/api/v1/settings", async (route) => {
+    if (route.request().method() === "PATCH") {
+      patchBody = route.request().postDataJSON();
+      emailFindingsEnabled = Boolean(
+        (patchBody as { email_findings_enabled?: boolean }).email_findings_enabled,
+      );
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        display_name: "Founder",
+        timezone: "Europe/Berlin",
+        default_daily_time: "08:30:00",
+        email_findings_enabled: emailFindingsEnabled,
+        email_weekly_brief_enabled: false,
+        email_delivery_available: true,
+      },
+    });
+  });
+  await page.route("**/api/v1/usage/summary", (route) =>
+    route.fulfill({ contentType: "application/json", json: { items: [] } }),
+  );
+
+  await page.goto("/settings");
+  await page.getByLabel("Important finding emails").check();
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await expect(page.getByText("Settings saved.")).toBeVisible();
+  expect(patchBody).toEqual({
+    default_daily_time: "08:30:00",
+    display_name: "Founder",
+    email_findings_enabled: true,
+    email_weekly_brief_enabled: false,
+    timezone: "Europe/Berlin",
+  });
+
+  await page.reload();
+  await expect(page.getByLabel("Important finding emails")).toBeChecked();
 });

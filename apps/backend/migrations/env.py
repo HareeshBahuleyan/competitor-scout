@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from competitor_scout.config import get_settings
 from competitor_scout.db import Base
-from competitor_scout.models import auth, briefs, intelligence, jobs  # noqa: F401
+from competitor_scout.models import auth, briefs, intelligence, jobs, notifications  # noqa: F401
 
 config = context.config
 

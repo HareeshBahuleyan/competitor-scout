@@ -27,7 +27,7 @@ from competitor_scout.security.csrf import csrf_token
 from competitor_scout.services.auth import create_session
 
 
-def api_settings() -> Settings:
+def api_settings(*, email_delivery_enabled: bool = False) -> Settings:
     return Settings(
         environment="test",
         database_url="postgresql+asyncpg://test:test@localhost/test",
@@ -38,11 +38,16 @@ def api_settings() -> Settings:
         google_client_secret="google-secret",
         otari_base_url="https://otari.invalid",
         otari_ai_token="test-token",
+        email_delivery_enabled=email_delivery_enabled,
+        resend_api_key="resend-test-key" if email_delivery_enabled else None,
+        notification_email_from="Scout <scout@example.com>" if email_delivery_enabled else None,
     )
 
 
-async def authenticated_client(db_session, user: User) -> tuple[AsyncClient, str]:
-    settings = api_settings()
+async def authenticated_client(
+    db_session, user: User, *, settings: Settings | None = None
+) -> tuple[AsyncClient, str]:
+    settings = settings or api_settings()
     session, secret = await create_session(db_session, user)
     await db_session.flush()
 
@@ -144,12 +149,18 @@ async def test_settings_get_and_patch_only_user_editable_fields(db_session) -> N
         "display_name": "settings-owner",
         "timezone": "UTC",
         "default_daily_time": "08:00:00",
+        "email_findings_enabled": False,
+        "email_weekly_brief_enabled": False,
+        "email_delivery_available": False,
     }
     assert updated.status_code == 200
     assert updated.json() == {
         "display_name": "Market Analyst",
         "timezone": "Europe/Berlin",
         "default_daily_time": "09:30:00",
+        "email_findings_enabled": False,
+        "email_weekly_brief_enabled": False,
+        "email_delivery_available": False,
     }
     await db_session.refresh(user)
     assert user.display_name == "Market Analyst"
@@ -172,6 +183,39 @@ async def test_settings_patch_requires_csrf(db_session) -> None:
     assert response.json()["detail"] == "CSRF validation failed"
     await db_session.refresh(user)
     assert user.display_name == "csrf-owner"
+
+
+async def test_email_preferences_are_independent_isolated_and_capability_is_read_only(
+    db_session,
+) -> None:
+    owner = await add_user(db_session, "email-owner")
+    outsider = await add_user(db_session, "email-outsider")
+    settings = api_settings(email_delivery_enabled=True)
+    client, token = await authenticated_client(db_session, owner, settings=settings)
+
+    async with client:
+        updated = await client.patch(
+            "/api/v1/settings",
+            headers={"X-CSRF-Token": token},
+            json={"email_findings_enabled": True},
+        )
+        rejected = await client.patch(
+            "/api/v1/settings",
+            headers={"X-CSRF-Token": token},
+            json={"email_delivery_available": False},
+        )
+
+    assert updated.status_code == 200
+    assert updated.json()["email_findings_enabled"] is True
+    assert updated.json()["email_weekly_brief_enabled"] is False
+    assert updated.json()["email_delivery_available"] is True
+    assert rejected.status_code == 422
+    await db_session.refresh(owner)
+    await db_session.refresh(outsider)
+    assert owner.email_findings_enabled is True
+    assert owner.email_weekly_brief_enabled is False
+    assert outsider.email_findings_enabled is False
+    assert outsider.email_weekly_brief_enabled is False
 
 
 async def test_settings_reject_invalid_timezone_and_developer_fields(db_session) -> None:
@@ -206,6 +250,10 @@ async def test_settings_reject_invalid_timezone_and_developer_fields(db_session)
         {"display_name": None},
         {"timezone": None},
         {"default_daily_time": None},
+        {"email_findings_enabled": None},
+        {"email_weekly_brief_enabled": None},
+        {"email_findings_enabled": "true"},
+        {"email_weekly_brief_enabled": 1},
     ],
 )
 async def test_settings_reject_null_for_non_nullable_fields(db_session, payload) -> None:
