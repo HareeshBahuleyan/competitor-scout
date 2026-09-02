@@ -508,8 +508,7 @@ class ScoutOrchestrator:
         usage: _UsageAccumulator,
     ) -> ScoutPlan | None:
         try:
-            async with asyncio.timeout(self._settings.planning_deadline_seconds):
-                return await self._plan_within_deadline(context, usage)
+            return await self._plan_within_deadline(context, usage)
         except TimeoutError:
             usage.mark_unsettled()
             await self._fail_task(context.planner_task_id, "planning_timeout")
@@ -901,13 +900,12 @@ class ScoutOrchestrator:
     ) -> SynthesisResult | None:
         task_id = await self._create_synthesis_task(context)
         try:
-            async with asyncio.timeout(self._settings.synthesis_deadline_seconds):
-                return await self._synthesize_within_deadline(
-                    context,
-                    task_id,
-                    accepted,
-                    usage,
-                )
+            return await self._synthesize_within_deadline(
+                context,
+                task_id,
+                accepted,
+                usage,
+            )
         except TimeoutError:
             usage.mark_unsettled()
             await self._fail_task(task_id, "synthesis_timeout")

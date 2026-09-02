@@ -169,7 +169,9 @@ class FakeOtari:
         fail_children: set[int] | None = None,
         budget_children: set[int] | None = None,
         planning_schema_failures: int = 0,
+        planning_delay_seconds: float = 0,
         synthesis_schema_failures: int = 0,
+        synthesis_delay_seconds: float = 0,
         known_cost: Decimal | None = None,
         input_tokens: int = 10,
         tool_calls: int | None = None,
@@ -180,7 +182,9 @@ class FakeOtari:
         self.fail_children = fail_children or set()
         self.budget_children = budget_children or set()
         self.planning_schema_failures = planning_schema_failures
+        self.planning_delay_seconds = planning_delay_seconds
         self.synthesis_schema_failures = synthesis_schema_failures
+        self.synthesis_delay_seconds = synthesis_delay_seconds
         self.known_cost = known_cost
         self.input_tokens = input_tokens
         self.tool_calls = tool_calls
@@ -196,6 +200,7 @@ class FakeOtari:
         self.calls.append(kwargs)
         output_type = kwargs["output_type"]
         if output_type is ScoutPlan:
+            await asyncio.sleep(self.planning_delay_seconds)
             if self.planning_schema_failures:
                 self.planning_schema_failures -= 1
                 raise OtariError("otari_schema_error", retryable=False)
@@ -228,6 +233,7 @@ class FakeOtari:
             finally:
                 self.active_children -= 1
         if output_type is SynthesisResult:
+            await asyncio.sleep(self.synthesis_delay_seconds)
             if self.synthesis_schema_failures:
                 self.synthesis_schema_failures -= 1
                 raise OtariError("otari_schema_error", retryable=False)
@@ -496,6 +502,64 @@ async def test_daily_run_happy_path_is_bounded_auditable_and_publishes(daily_sto
     assert all(call["model"] == "competitor-scout-child" for call in child_calls)
     assert all(call["enable_web_search"] is True for call in child_calls)
     assert all(call["max_tool_iterations"] == 4 for call in child_calls)
+
+
+async def test_planning_repair_gets_a_fresh_request_deadline(daily_store) -> None:
+    sessions = daily_store
+    _user_id, _competitor_id, run_id = await seed_daily_run(sessions)
+    fake = FakeOtari(
+        task_count=1,
+        planning_schema_failures=1,
+        planning_delay_seconds=0.6,
+    )
+    orchestrator = await make_orchestrator(
+        sessions,
+        fake,
+        settings(planning_deadline_seconds=1),
+    )
+
+    status = await orchestrator.execute_daily_run(run_id)
+
+    async with sessions() as session:
+        planner = await session.scalar(
+            select(AgentTask).where(
+                AgentTask.scout_run_id == run_id,
+                AgentTask.role == AgentTaskRole.MAIN_PLANNER,
+            )
+        )
+
+    assert status is ScoutRunStatus.COMPLETED
+    assert planner is not None and planner.status is AgentTaskStatus.SUCCEEDED
+    assert planner.attempt_count == 2
+
+
+async def test_synthesis_repair_gets_a_fresh_request_deadline(daily_store) -> None:
+    sessions = daily_store
+    _user_id, _competitor_id, run_id = await seed_daily_run(sessions)
+    fake = FakeOtari(
+        task_count=1,
+        synthesis_schema_failures=1,
+        synthesis_delay_seconds=0.6,
+    )
+    orchestrator = await make_orchestrator(
+        sessions,
+        fake,
+        settings(synthesis_deadline_seconds=1),
+    )
+
+    status = await orchestrator.execute_daily_run(run_id)
+
+    async with sessions() as session:
+        synthesizer = await session.scalar(
+            select(AgentTask).where(
+                AgentTask.scout_run_id == run_id,
+                AgentTask.role == AgentTaskRole.MAIN_SYNTHESIZER,
+            )
+        )
+
+    assert status is ScoutRunStatus.COMPLETED
+    assert synthesizer is not None and synthesizer.status is AgentTaskStatus.SUCCEEDED
+    assert synthesizer.attempt_count == 2
 
 
 async def test_first_party_child_search_stays_within_approved_scope(daily_store) -> None:
