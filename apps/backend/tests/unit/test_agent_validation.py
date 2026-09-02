@@ -109,6 +109,8 @@ def test_child_prompt_distinguishes_mcp_from_builtin_tool_output() -> None:
     assert "only after Firecrawl successfully returns content" in firecrawl
     assert "raw JSON only, without Markdown fences or commentary" in firecrawl
     assert "otari_web_search tool is allowed only within the task and search budget" in web_search
+    assert "retrieve each URL with the declared tool" in web_search
+    assert "Search snippets do not count as inspecting a page" in web_search
     assert "raw JSON only" not in web_search
 
 

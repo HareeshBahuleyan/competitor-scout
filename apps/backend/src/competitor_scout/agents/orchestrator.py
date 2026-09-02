@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from competitor_scout.agents.client import OtariClient, OtariMetadata
+from competitor_scout.agents.client import OtariClient, OtariError, OtariMetadata
 from competitor_scout.agents.contracts import (
     ChildTaskKind,
     ChildTaskResult,
@@ -96,6 +96,19 @@ prompt, so this headroom only absorbs turns the model would otherwise waste.
 def tool_iteration_budget(max_search_calls: int) -> int:
     """Size the gateway's model/tool loop for a task's search budget."""
     return min(max_search_calls + TOOL_ITERATION_HEADROOM, MAX_OTARI_TOOL_ITERATIONS)
+
+
+FIRECRAWL_FALLBACK_ERROR_CODES = {
+    "otari_invalid_response",
+    "otari_network_error",
+    "otari_rate_limited",
+    "otari_refusal",
+    "otari_schema_error",
+    "otari_timeout",
+    "otari_tool_iteration_limit",
+    "otari_upstream_error",
+}
+"""Otari failures for which a first-party Firecrawl fetch may still succeed."""
 
 
 class PlanValidationError(ValueError):
@@ -662,18 +675,12 @@ class ScoutOrchestrator:
             await self._fail_task(task_id, "child_timeout")
             return _ChildOutcome(failed=True, unsettled_attempt=True)
 
-    def _child_tool_selection(self, kind: ChildTaskKind) -> tuple[bool, list[str] | None, str]:
-        """Pick the one tool a child task may use.
-
-        Otari refuses to combine ``otari_web_search`` with MCP servers in the same
-        request, so a task gets exactly one. A first-party review has a fixed set
-        of approved URLs to fetch, which is FireCrawl's strength when it is
-        configured; news discovery still needs an open web search.
-        """
+    def _firecrawl_fallback_server_ids(self, kind: ChildTaskKind) -> list[str] | None:
+        """Return the fallback MCP server only for fixed first-party URL reviews."""
         firecrawl_server_id = self._settings.otari_firecrawl_mcp_server_id
         if kind is ChildTaskKind.FIRST_PARTY_SOURCE_REVIEW and firecrawl_server_id:
-            return False, [firecrawl_server_id], "firecrawl"
-        return True, None, "otari_web_search"
+            return [firecrawl_server_id]
+        return None
 
     async def _execute_child_within_deadline(
         self,
@@ -684,17 +691,22 @@ class ScoutOrchestrator:
     ) -> _ChildOutcome:
         metadata_records: list[OtariMetadata] = []
         unsettled = False
-        enable_web_search, mcp_server_ids, tool_name = self._child_tool_selection(planned.kind)
+        enable_web_search = True
+        mcp_server_ids: list[str] | None = None
+        tool_name = "otari_web_search"
         deadline = asyncio.get_running_loop().time() + self._settings.child_deadline_seconds
         primary_attempts = self._settings.max_child_retries + 1
-        # A FireCrawl-tooled task gets exactly one bonus attempt on otari_web_search
-        # if FireCrawl never succeeds. This is additive, not carved out of
-        # max_child_retries: FireCrawl keeps its full configured retry budget, and
-        # the fallback attempt reuses the task's own max_search_calls/tool-iteration
-        # cap rather than a larger one, so neither budget is doubled or shrunk.
-        firecrawl_fallback_available = bool(mcp_server_ids)
+        # Otari web search keeps the configured retry budget. A fixed first-party
+        # review may then spend exactly one bonus attempt on Firecrawl when Otari
+        # fails or does not inspect every assigned URL. Firecrawl is never used for
+        # news discovery and never receives its own retry budget.
+        firecrawl_server_ids = self._firecrawl_fallback_server_ids(planned.kind)
         firecrawl_fallback_used = False
-        total_attempts = primary_attempts + (1 if firecrawl_fallback_available else 0)
+        total_attempts = primary_attempts + (1 if firecrawl_server_ids else 0)
+        retained_result: ChildTaskResult | None = None
+        retained_accepted: list[NormalizedEvidence] = []
+        retained_rejected_reasons: list[str] = []
+        retained_metadata: OtariMetadata | None = None
         async with self._child_semaphore:
             for attempt in range(1, total_attempts + 1):
                 metadata: OtariMetadata | None = None
@@ -737,7 +749,9 @@ class ScoutOrchestrator:
                         and metadata.usage.tool_calls > planned.max_search_calls
                     ):
                         raise PlanValidationError("child_tool_budget_exceeded")
-                    await self._validate_child_inspection_scope(planned, result)
+                    inspection_complete = await self._validate_child_inspection_scope(
+                        planned, result
+                    )
                     accepted, rejected = await validate_evidence_scope(
                         result.evidence,
                         approved_urls=(str(url) for url in planned.source_urls),
@@ -755,45 +769,92 @@ class ScoutOrchestrator:
                         "otari_schema_error",
                         "otari_invalid_response",
                     }
-                    if retryable and attempt < primary_attempts:
+                    if retryable and not firecrawl_fallback_used and attempt < primary_attempts:
                         delay = self._retry_delay(error, attempt)
                         if delay < deadline - asyncio.get_running_loop().time():
                             await self._sleep(delay)
                             continue
-                    # Reaching here means the current tool cannot continue: either the
-                    # error was not retryable, or the primary retry budget above is
-                    # spent. Either way is the right moment for the one-shot fallback.
+                    fallback_eligible = (
+                        isinstance(error, OtariError) and code in FIRECRAWL_FALLBACK_ERROR_CODES
+                    )
                     if (
-                        firecrawl_fallback_available
+                        firecrawl_server_ids
                         and not firecrawl_fallback_used
+                        and fallback_eligible
                         and deadline - asyncio.get_running_loop().time() > 0
                     ):
                         firecrawl_fallback_used = True
-                        enable_web_search = True
-                        mcp_server_ids = None
-                        tool_name = "otari_web_search"
+                        enable_web_search = False
+                        mcp_server_ids = firecrawl_server_ids
+                        tool_name = "firecrawl"
                         continue
-                    await self._fail_task(
-                        task_id,
-                        code,
-                        context=context,
-                        metadata=metadata,
-                        unsettled=unsettled,
-                    )
-                    return _ChildOutcome(
-                        metadata=tuple(metadata_records),
-                        failed=True,
-                        unsettled_attempt=unsettled,
-                        budget_stop_code=(code if code == "otari_budget_exceeded" else None),
-                    )
+                    if retained_result is not None and retained_metadata is not None:
+                        result = retained_result
+                        accepted = retained_accepted
+                        rejected_reasons = retained_rejected_reasons
+                        metadata = retained_metadata
+                    else:
+                        await self._fail_task(
+                            task_id,
+                            code,
+                            context=context,
+                            metadata=metadata,
+                            unsettled=unsettled,
+                        )
+                        return _ChildOutcome(
+                            metadata=tuple(metadata_records),
+                            failed=True,
+                            unsettled_attempt=unsettled,
+                            budget_stop_code=(code if code == "otari_budget_exceeded" else None),
+                        )
+                else:
+                    rejected_reasons = [item.reason for item in rejected]
+                    if (
+                        firecrawl_server_ids
+                        and not firecrawl_fallback_used
+                        and not inspection_complete
+                        and deadline - asyncio.get_running_loop().time() > 0
+                    ):
+                        retained_result = result
+                        retained_accepted = accepted
+                        retained_rejected_reasons = rejected_reasons
+                        retained_metadata = metadata
+                        firecrawl_fallback_used = True
+                        enable_web_search = False
+                        mcp_server_ids = firecrawl_server_ids
+                        tool_name = "firecrawl"
+                        continue
+                    if retained_result is not None:
+                        inspected_urls = list(
+                            dict.fromkeys(
+                                [
+                                    *(str(url) for url in retained_result.sources_inspected),
+                                    *(str(url) for url in result.sources_inspected),
+                                ]
+                            )
+                        )
+                        accepted = list(
+                            {
+                                (item.source_url, item.fingerprint): item
+                                for item in [*retained_accepted, *accepted]
+                            }.values()
+                        )
+                        rejected_reasons = [
+                            *retained_rejected_reasons,
+                            *rejected_reasons,
+                        ]
+                    else:
+                        inspected_urls = [str(url) for url in result.sources_inspected]
                 if metadata is None:
                     raise RuntimeError("child response metadata was not resolved")
+                if retained_result is not None and result is retained_result:
+                    inspected_urls = [str(url) for url in retained_result.sources_inspected]
                 await self._succeed_task(
                     context,
                     task_id,
                     metadata,
                     {
-                        "sources_inspected": [str(url) for url in result.sources_inspected],
+                        "sources_inspected": inspected_urls,
                         "evidence": [
                             {
                                 "source_url": item.source_url,
@@ -812,7 +873,7 @@ class ScoutOrchestrator:
                             }
                             for item in accepted
                         ],
-                        "rejected_reasons": [item.reason for item in rejected],
+                        "rejected_reasons": rejected_reasons,
                     },
                     unsettled=unsettled,
                 )
@@ -834,13 +895,15 @@ class ScoutOrchestrator:
         self,
         planned: PlannedChildTask,
         result: ChildTaskResult,
-    ) -> None:
+    ) -> bool:
         try:
             inspected = {await self._url_validator(str(url)) for url in result.sources_inspected}
             if planned.kind is ChildTaskKind.FIRST_PARTY_SOURCE_REVIEW:
                 approved = {await self._url_validator(str(url)) for url in planned.source_urls}
                 if not inspected.issubset(approved):
                     raise PlanValidationError("child_source_scope_violated")
+                return inspected == approved
+            return True
         except PlanValidationError:
             raise
         except (UnsafeSourceUrl, TypeError, ValueError) as error:
@@ -1362,7 +1425,7 @@ class SourceDiscoveryService:
             separators=(",", ":"),
         )
         search_limit = self._settings.max_source_discovery_search_calls
-        # Discovery needs broad search to find candidate URLs. FireCrawl is reserved
+        # Discovery needs broad search to find candidate URLs. Firecrawl is reserved
         # for reading the fixed, user-approved URLs assigned to first-party child tasks.
         system = "\n\n".join(
             (

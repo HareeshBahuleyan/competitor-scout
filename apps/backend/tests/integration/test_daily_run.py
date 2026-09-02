@@ -176,7 +176,10 @@ class FakeOtari:
         input_tokens: int = 10,
         tool_calls: int | None = None,
         first_party_out_of_scope: bool = False,
+        fail_while_web_search: bool = False,
         fail_while_mcp: bool = False,
+        incomplete_while_web_search: bool = False,
+        empty_while_web_search: bool = False,
     ) -> None:
         self.plan = plan(task_count)
         self.fail_children = fail_children or set()
@@ -189,7 +192,10 @@ class FakeOtari:
         self.input_tokens = input_tokens
         self.tool_calls = tool_calls
         self.first_party_out_of_scope = first_party_out_of_scope
+        self.fail_while_web_search = fail_while_web_search
         self.fail_while_mcp = fail_while_mcp
+        self.incomplete_while_web_search = incomplete_while_web_search
+        self.empty_while_web_search = empty_while_web_search
         self.calls: list[dict[str, object]] = []
         self.child_attempts: dict[int, int] = {}
         self.active_children = 0
@@ -223,9 +229,21 @@ class FakeOtari:
                     raise OtariError("otari_budget_exceeded", retryable=False, status_code=403)
                 if index in self.fail_children:
                     raise OtariError("otari_upstream_error", retryable=True)
+                if self.fail_while_web_search and kwargs.get("enable_web_search"):
+                    raise OtariError("otari_upstream_error", retryable=True)
                 if self.fail_while_mcp and kwargs.get("mcp_server_ids"):
                     raise OtariError("otari_upstream_error", retryable=True)
                 if payload["task"]["kind"] == "first_party_source_review":
+                    if self.incomplete_while_web_search and kwargs.get("enable_web_search"):
+                        return ChildTaskResult(
+                            sources_inspected=[], evidence=[], limitations=["Page was inaccessible"]
+                        ), self._metadata(f"child-{index}")
+                    if self.empty_while_web_search and kwargs.get("enable_web_search"):
+                        return ChildTaskResult(
+                            sources_inspected=payload["task"]["source_urls"],
+                            evidence=[],
+                            limitations=[],
+                        ), self._metadata(f"child-{index}")
                     return first_party_child_result(
                         include_out_of_scope=self.first_party_out_of_scope
                     ), self._metadata(f"child-{index}")
@@ -603,7 +621,9 @@ async def test_first_party_child_search_stays_within_approved_scope(daily_store)
     assert evidence_urls == ["https://acme.example/pricing"]
 
 
-async def test_first_party_child_uses_firecrawl_mcp_when_configured(daily_store) -> None:
+async def test_first_party_child_uses_web_search_first_when_firecrawl_is_configured(
+    daily_store,
+) -> None:
     sessions = daily_store
     _user_id, _competitor_id, run_id = await seed_daily_run(sessions)
     fake = FakeOtari(task_count=1)
@@ -631,17 +651,18 @@ async def test_first_party_child_uses_firecrawl_mcp_when_configured(daily_store)
     child_call = next(call for call in fake.calls if call["output_type"] is ChildTaskResult)
     child_system_prompt = child_call["messages"][0]["content"]
     assert status is ScoutRunStatus.COMPLETED
-    assert child_call["enable_web_search"] is False
-    assert child_call["mcp_server_ids"] == ["11111111-1111-1111-1111-111111111111"]
-    assert "firecrawl" in child_system_prompt
+    assert child_call["enable_web_search"] is True
+    assert child_call["mcp_server_ids"] is None
+    assert "otari_web_search" in child_system_prompt
+    assert len([call for call in fake.calls if call["output_type"] is ChildTaskResult]) == 1
 
 
-async def test_first_party_child_falls_back_to_web_search_when_firecrawl_fails(
+async def test_first_party_child_falls_back_to_firecrawl_when_web_search_fails(
     daily_store,
 ) -> None:
     sessions = daily_store
     _user_id, _competitor_id, run_id = await seed_daily_run(sessions)
-    fake = FakeOtari(task_count=1, fail_while_mcp=True)
+    fake = FakeOtari(task_count=1, fail_while_web_search=True)
     fake.plan = ScoutPlan.model_validate(
         {
             "tasks": [
@@ -668,15 +689,15 @@ async def test_first_party_child_falls_back_to_web_search_when_firecrawl_fails(
 
     child_calls = [call for call in fake.calls if call["output_type"] is ChildTaskResult]
     assert status is ScoutRunStatus.COMPLETED
-    # FireCrawl kept its own configured retry (2 attempts), then got exactly one
-    # bonus web-search attempt: 3 total, not 4 (which would double the retry budget).
+    # Otari web search keeps its configured retry (2 attempts), then gets exactly
+    # one bonus Firecrawl attempt: 3 total, not 4 (which would double retries).
     assert len(child_calls) == 3
     assert [call["mcp_server_ids"] for call in child_calls] == [
-        ["11111111-1111-1111-1111-111111111111"],
-        ["11111111-1111-1111-1111-111111111111"],
         None,
+        None,
+        ["11111111-1111-1111-1111-111111111111"],
     ]
-    assert [call["enable_web_search"] for call in child_calls] == [False, False, True]
+    assert [call["enable_web_search"] for call in child_calls] == [True, True, False]
     async with sessions() as session:
         task = await session.scalar(
             select(AgentTask).where(
@@ -687,12 +708,86 @@ async def test_first_party_child_falls_back_to_web_search_when_firecrawl_fails(
     assert task is not None and task.attempt_count == 3
 
 
-async def test_first_party_child_fails_when_firecrawl_and_fallback_both_fail(
+async def test_first_party_child_falls_back_when_web_search_misses_assigned_url(
     daily_store,
 ) -> None:
     sessions = daily_store
     _user_id, _competitor_id, run_id = await seed_daily_run(sessions)
-    fake = FakeOtari(task_count=1, fail_while_mcp=True, fail_children={0})
+    fake = FakeOtari(task_count=1, incomplete_while_web_search=True)
+    fake.plan = ScoutPlan.model_validate(
+        {
+            "tasks": [
+                {
+                    "kind": "first_party_source_review",
+                    "objective": "Review approved source 0",
+                    "source_urls": ["https://acme.example/pricing"],
+                    "search_query": None,
+                    "expected_category": "pricing",
+                    "max_search_calls": 1,
+                    "completion_criteria": "Return directly quoted evidence or none",
+                }
+            ]
+        },
+        strict=False,
+    )
+    configured = settings(otari_firecrawl_mcp_server_id="11111111-1111-1111-1111-111111111111")
+    orchestrator = await make_orchestrator(sessions, fake, configured)
+
+    status = await orchestrator.execute_daily_run(run_id)
+
+    child_calls = [call for call in fake.calls if call["output_type"] is ChildTaskResult]
+    assert status is ScoutRunStatus.COMPLETED
+    assert [call["enable_web_search"] for call in child_calls] == [True, False]
+    assert [call["mcp_server_ids"] for call in child_calls] == [
+        None,
+        ["11111111-1111-1111-1111-111111111111"],
+    ]
+
+
+async def test_first_party_child_does_not_fallback_when_all_urls_were_inspected(
+    daily_store,
+) -> None:
+    sessions = daily_store
+    _user_id, _competitor_id, run_id = await seed_daily_run(sessions)
+    fake = FakeOtari(task_count=1, empty_while_web_search=True)
+    fake.plan = ScoutPlan.model_validate(
+        {
+            "tasks": [
+                {
+                    "kind": "first_party_source_review",
+                    "objective": "Review approved source 0",
+                    "source_urls": ["https://acme.example/pricing"],
+                    "search_query": None,
+                    "expected_category": "pricing",
+                    "max_search_calls": 1,
+                    "completion_criteria": "Return directly quoted evidence or none",
+                }
+            ]
+        },
+        strict=False,
+    )
+    configured = settings(otari_firecrawl_mcp_server_id="11111111-1111-1111-1111-111111111111")
+    orchestrator = await make_orchestrator(sessions, fake, configured)
+
+    status = await orchestrator.execute_daily_run(run_id)
+
+    child_calls = [call for call in fake.calls if call["output_type"] is ChildTaskResult]
+    assert status is ScoutRunStatus.FAILED
+    assert len(child_calls) == 1
+    assert child_calls[0]["enable_web_search"] is True
+    assert child_calls[0]["mcp_server_ids"] is None
+
+
+async def test_first_party_child_fails_when_web_search_and_firecrawl_both_fail(
+    daily_store,
+) -> None:
+    sessions = daily_store
+    _user_id, _competitor_id, run_id = await seed_daily_run(sessions)
+    fake = FakeOtari(
+        task_count=1,
+        fail_while_web_search=True,
+        fail_while_mcp=True,
+    )
     fake.plan = ScoutPlan.model_validate(
         {
             "tasks": [
@@ -721,8 +816,8 @@ async def test_first_party_child_fails_when_firecrawl_and_fallback_both_fail(
     assert status is ScoutRunStatus.FAILED
     assert len(child_calls) == 2
     assert [call["mcp_server_ids"] for call in child_calls] == [
-        ["11111111-1111-1111-1111-111111111111"],
         None,
+        ["11111111-1111-1111-1111-111111111111"],
     ]
 
 
