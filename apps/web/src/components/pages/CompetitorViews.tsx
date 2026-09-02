@@ -415,12 +415,29 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
             </p>
           ) : null}
           {sources.data?.items.length ? (
-            <SourceSelectionList
-              disabled={startMonitoring.isPending}
-              onToggle={toggleSource}
-              selectedSourceIds={selectedSourceIds}
-              sources={sources.data.items}
-            />
+            <>
+              <button
+                className="rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white disabled:bg-slate-400"
+                disabled={!selectedSourceIds.size || startMonitoring.isPending}
+                onClick={() => startMonitoring.mutate([...selectedSourceIds])}
+                type="button"
+              >
+                {startMonitoring.isPending
+                  ? "Starting monitoring…"
+                  : "Start monitoring & run first scan"}
+              </button>
+              {startMonitoring.isError ? (
+                <p className="text-red-700" role="alert">
+                  {errorText(startMonitoring.error)}
+                </p>
+              ) : null}
+              <SourceSelectionList
+                disabled={startMonitoring.isPending}
+                onToggle={toggleSource}
+                selectedSourceIds={selectedSourceIds}
+                sources={sources.data.items}
+              />
+            </>
           ) : canLoadSources && !sources.isPending ? (
             <p className="empty-state p-5">No sources were found. Add a trusted URL below.</p>
           ) : null}
@@ -453,21 +470,6 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
           {addSource.isError ? (
             <p className="text-red-700" role="alert">
               {errorText(addSource.error)}
-            </p>
-          ) : null}
-          <button
-            className="rounded-xl bg-slate-950 px-5 py-3 font-semibold text-white disabled:bg-slate-400"
-            disabled={!selectedSourceIds.size || startMonitoring.isPending}
-            onClick={() => startMonitoring.mutate([...selectedSourceIds])}
-            type="button"
-          >
-            {startMonitoring.isPending
-              ? "Starting monitoring…"
-              : "Start monitoring & run first scan"}
-          </button>
-          {startMonitoring.isError ? (
-            <p className="text-red-700" role="alert">
-              {errorText(startMonitoring.error)}
             </p>
           ) : null}
         </div>

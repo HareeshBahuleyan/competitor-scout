@@ -3,9 +3,13 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 
+import { DigestStatusCard } from "@/components/DigestStatusCard";
+import { MonitoringCoverageReceipt } from "@/components/MonitoringCoverageReceipt";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { apiGetClient } from "@/lib/api";
-import { weeklyBriefPageSchema, weeklyBriefSchema } from "@/lib/schemas";
+import { meQueryOptions } from "@/lib/current-user";
+import { formatUserDateTime } from "@/lib/dates";
+import { digestOverviewSchema, weeklyBriefPageSchema, weeklyBriefSchema } from "@/lib/schemas";
 
 function errorText(error: unknown) {
   return error instanceof Error ? error.message : "Something went wrong.";
@@ -25,12 +29,22 @@ function period(start: string, end: string) {
 }
 
 export function BriefsListView() {
-  const query = useQuery({
+  const briefs = useQuery({
     queryKey: ["briefs"],
     queryFn: () => apiGetClient("/api/v1/briefs", weeklyBriefPageSchema),
   });
+  const overview = useQuery({
+    queryKey: ["briefs", "overview"],
+    queryFn: () => apiGetClient("/api/v1/briefs/overview", digestOverviewSchema),
+  });
+  const me = useQuery(meQueryOptions);
+  const queries = [briefs, overview, me];
+  const failed = queries.find((query) => query.isError);
+  const history =
+    briefs.data?.items.filter((brief) => brief.id !== overview.data?.latest_brief?.id) ?? [];
+
   return (
-    <section className="space-y-6">
+    <section className="space-y-7">
       <header>
         <p className="eyebrow">Executive intelligence</p>
         <h1 className="mt-1 text-4xl font-semibold">Weekly Digest</h1>
@@ -38,31 +52,49 @@ export function BriefsListView() {
           Your week in one page, backed by the updates behind it.
         </p>
       </header>
-      {query.isPending ? <LoadingState label="Loading Weekly Digests…" rows={4} /> : null}
-      {query.isError ? (
+      {queries.some((query) => query.isPending) ? (
+        <LoadingState label="Loading Weekly Digests…" rows={4} />
+      ) : null}
+      {failed ? (
         <p className="text-red-700" role="alert">
-          {errorText(query.error)}
+          {errorText(failed.error)}
         </p>
       ) : null}
-      {query.data?.items.length === 0 ? (
-        <p className="empty-state p-8 text-center">No Weekly Digest yet.</p>
+      {overview.data && me.data ? (
+        <DigestStatusCard overview={overview.data} timeZone={me.data.timezone} />
       ) : null}
-      {query.data?.items.length ? (
-        <ul className="space-y-4">
-          {query.data.items.map((brief) => (
-            <li className="surface surface-interactive p-5" key={brief.id}>
-              <p className="text-sm text-slate-500">
-                {period(brief.period_start, brief.period_end)}
-              </p>
-              <h2 className="mt-1 text-lg font-semibold">
-                <Link className="hover:underline" href={`/briefs/${brief.id}`}>
-                  {brief.title}
-                </Link>
-              </h2>
-              <p className="mt-2 text-slate-600">{brief.executive_summary}</p>
-            </li>
-          ))}
-        </ul>
+      {briefs.data && overview.data ? (
+        <section aria-labelledby="digest-archive-heading" className="space-y-4">
+          <div>
+            <p className="eyebrow">Published record</p>
+            <h2 className="mt-1 text-xl font-semibold" id="digest-archive-heading">
+              Digest archive
+            </h2>
+          </div>
+          {history.length ? (
+            <ul className="space-y-4">
+              {history.map((brief) => (
+                <li className="surface surface-interactive p-5" key={brief.id}>
+                  <p className="text-sm text-slate-500">
+                    {period(brief.period_start, brief.period_end)}
+                  </p>
+                  <h3 className="mt-1 text-lg font-semibold">
+                    <Link className="hover:underline" href={`/briefs/${brief.id}`}>
+                      {brief.title}
+                    </Link>
+                  </h3>
+                  <p className="mt-2 text-slate-600">{brief.executive_summary}</p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="empty-state p-6 text-sm">
+              {overview.data.latest_brief
+                ? "No earlier digests in the archive."
+                : "The archive will begin when the first digest is published."}
+            </p>
+          )}
+        </section>
       ) : null}
     </section>
   );
@@ -73,6 +105,11 @@ export function BriefDetailView({ briefId }: { briefId: string }) {
     queryKey: ["brief", briefId],
     queryFn: () => apiGetClient(`/api/v1/briefs/${briefId}`, weeklyBriefSchema),
   });
+  const overview = useQuery({
+    queryKey: ["briefs", "overview"],
+    queryFn: () => apiGetClient("/api/v1/briefs/overview", digestOverviewSchema),
+  });
+  const me = useQuery(meQueryOptions);
   if (query.isPending) return <LoadingState label="Loading the Weekly Digest…" rows={4} />;
   if (query.isError)
     return (
@@ -90,6 +127,7 @@ export function BriefDetailView({ briefId }: { briefId: string }) {
         <h1 className="mt-2 text-4xl font-semibold">{brief.title}</h1>
         <p className="mt-4 text-lg leading-8 text-slate-700">{brief.executive_summary}</p>
       </header>
+      <MonitoringCoverageReceipt coverage={brief.coverage} />
       {brief.sections.length ? (
         brief.sections.map((section, index) => (
           <section
@@ -126,15 +164,29 @@ export function BriefDetailView({ briefId }: { briefId: string }) {
           </section>
         ))
       ) : (
-        <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-600">
-          This brief intentionally contains no finding references for an empty week.
-        </p>
+        <section className="rounded-xl border border-dashed border-slate-300 p-8">
+          <p className="eyebrow">Quiet week</p>
+          <h2 className="mt-2 text-xl font-semibold">No important changes found this week</h2>
+          <p className="mt-3 leading-7 text-slate-600">
+            Scout published no accepted material changes for this period. This is a monitoring
+            result, not a missing report; expand the coverage receipt to see what was checked and
+            where coverage was incomplete.
+          </p>
+        </section>
       )}
+      {!brief.sections.length && overview.data?.next_digest_at && me.data ? (
+        <p className="text-sm text-slate-600">
+          Next Weekly Digest:{" "}
+          <time dateTime={overview.data.next_digest_at}>
+            {formatUserDateTime(overview.data.next_digest_at, me.data.timezone)}
+          </time>
+        </p>
+      ) : null}
       <Link
         className="text-sm font-medium text-blue-700 hover:underline"
         href={`/runs/${brief.scout_run_id}`}
       >
-        View the scan that produced this digest
+        View monitoring activity
       </Link>
     </article>
   );

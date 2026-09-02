@@ -6,15 +6,16 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { CompetitorFavicon } from "@/components/CompetitorFavicon";
+import { DigestStatusCard } from "@/components/DigestStatusCard";
 import { FindingCard } from "@/components/FindingCard";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { apiGetClient } from "@/lib/api";
 import { meQueryOptions } from "@/lib/current-user";
 import {
   competitorPageSchema,
+  digestOverviewSchema,
   findingPageSchema,
   runPageSchema,
-  weeklyBriefPageSchema,
   type Run,
 } from "@/lib/schemas";
 
@@ -52,9 +53,9 @@ export function DashboardView() {
     queryKey: ["dashboard", "runs"],
     queryFn: () => apiGetClient("/api/v1/runs?limit=25", runPageSchema),
   });
-  const briefs = useQuery({
-    queryKey: ["dashboard", "briefs"],
-    queryFn: () => apiGetClient("/api/v1/briefs?limit=1", weeklyBriefPageSchema),
+  const digestOverview = useQuery({
+    queryKey: ["dashboard", "briefs", "overview"],
+    queryFn: () => apiGetClient("/api/v1/briefs/overview", digestOverviewSchema),
   });
   useEffect(() => {
     if (competitors.data?.items.length === 0) {
@@ -62,7 +63,15 @@ export function DashboardView() {
     }
   }, [competitors.data?.items.length, router]);
 
-  const queries = [me, competitors, criticalFindings, highFindings, mediumFindings, runs, briefs];
+  const queries = [
+    me,
+    competitors,
+    criticalFindings,
+    highFindings,
+    mediumFindings,
+    runs,
+    digestOverview,
+  ];
   if (queries.some((query) => query.isPending)) {
     return <LoadingState label="Loading dashboard…" rows={5} />;
   }
@@ -79,14 +88,14 @@ export function DashboardView() {
   const highFindingPage = highFindings.data;
   const mediumFindingPage = mediumFindings.data;
   const runPage = runs.data;
-  const briefPage = briefs.data;
+  const digest = digestOverview.data;
   if (
     !competitorPage ||
     !criticalFindingPage ||
     !highFindingPage ||
     !mediumFindingPage ||
     !runPage ||
-    !briefPage ||
+    !digest ||
     !me.data
   ) {
     return (
@@ -107,8 +116,6 @@ export function DashboardView() {
   ]
     .sort((left, right) => right.published_at.localeCompare(left.published_at))
     .slice(0, 10);
-  const latestBrief = briefPage.items[0];
-
   return (
     <section className="space-y-9">
       <header className="flex flex-wrap items-end justify-between gap-5">
@@ -210,33 +217,7 @@ export function DashboardView() {
                 Archive <span aria-hidden="true">→</span>
               </Link>
             </div>
-            {latestBrief ? (
-              <article className="surface surface-interactive card-target group p-5">
-                <p className="eyebrow">Latest edition</p>
-                <h3 className="mt-2 leading-snug">
-                  <Link
-                    className="card-link font-semibold transition-colors group-hover:text-[var(--color-accent-strong)]"
-                    href={`/briefs/${latestBrief.id}`}
-                  >
-                    {latestBrief.title}
-                  </Link>
-                </h3>
-                <p className="mt-2 line-clamp-4 text-sm leading-6 text-slate-600">
-                  {latestBrief.executive_summary}
-                </p>
-                <p className="mt-3 text-xs font-semibold text-[var(--color-accent-strong)]">
-                  Read the digest
-                  <span
-                    aria-hidden="true"
-                    className="ml-1 inline-block transition-transform group-hover:translate-x-0.5"
-                  >
-                    →
-                  </span>
-                </p>
-              </article>
-            ) : (
-              <p className="empty-state p-5 text-sm">No Weekly Digest yet.</p>
-            )}
+            <DigestStatusCard overview={digest} timeZone={me.data.timezone} />
           </section>
         </div>
       </div>

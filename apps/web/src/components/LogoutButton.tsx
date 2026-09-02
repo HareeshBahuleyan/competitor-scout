@@ -1,10 +1,10 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 
-import { apiGetClient, apiMutate } from "@/lib/api";
-import { meSchema } from "@/lib/schemas";
+import { apiMutate } from "@/lib/api";
+import { meQueryOptions } from "@/lib/current-user";
 
 type LogoutButtonProps = {
   compact?: boolean;
@@ -13,15 +13,11 @@ type LogoutButtonProps = {
 export function LogoutButton({ compact = false }: LogoutButtonProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const me = useQuery({
-    queryKey: ["me"],
-    queryFn: () => apiGetClient("/api/v1/me", meSchema),
-  });
   const logout = useMutation({
     mutationFn: async () => {
-      if (!me.data) throw new Error("Account information is unavailable.");
+      const me = await queryClient.fetchQuery(meQueryOptions);
       await apiMutate("/auth/logout", {
-        csrfToken: me.data.csrf_token,
+        csrfToken: me.csrf_token,
         method: "POST",
       });
     },
@@ -30,7 +26,6 @@ export function LogoutButton({ compact = false }: LogoutButtonProps) {
       router.replace("/login");
     },
   });
-  const disabled = me.isPending || me.isError || logout.isPending;
 
   return (
     <div className={compact ? "" : "mt-4"}>
@@ -42,7 +37,7 @@ export function LogoutButton({ compact = false }: LogoutButtonProps) {
             ? "icon-button"
             : "flex min-h-10 w-full items-center gap-2 rounded-xl px-3 text-sm font-semibold text-slate-600 transition hover:bg-white hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
         }
-        disabled={disabled}
+        disabled={logout.isPending}
         onClick={() => logout.mutate()}
         title="Log out"
         type="button"

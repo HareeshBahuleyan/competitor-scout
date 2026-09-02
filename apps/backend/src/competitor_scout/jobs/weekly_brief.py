@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from competitor_scout.agents.client import OtariMetadata
@@ -24,6 +25,9 @@ from competitor_scout.models.intelligence import (
     AgentTask,
     AgentTaskRole,
     AgentTaskStatus,
+    Competitor,
+    EvidenceItem,
+    EvidenceObservation,
     Finding,
     FindingEvidence,
     RunType,
@@ -31,7 +35,12 @@ from competitor_scout.models.intelligence import (
     ScoutRunStatus,
     UsageEvent,
 )
-from competitor_scout.schemas.briefs import WeeklyBriefResult, empty_weekly_brief
+from competitor_scout.schemas.briefs import (
+    CoveredCompetitor,
+    MonitoringCoverageReceipt,
+    WeeklyBriefResult,
+    empty_weekly_brief,
+)
 
 MAX_BRIEF_FINDINGS = 100
 MAX_EVIDENCE_PER_FINDING = 10
@@ -60,6 +69,7 @@ class _BriefContext:
     period: WeeklyPeriod
     finding_ids: frozenset[uuid.UUID]
     input_document: dict[str, object]
+    coverage: dict[str, object]
     initial_daily_cost: Decimal
 
 
@@ -180,6 +190,11 @@ class WeeklyBriefHandler:
                 return run.status
             run.status = ScoutRunStatus.PLANNING
             run.started_at = now
+            coverage = await self._coverage_receipt(
+                session,
+                user_id=run.user_id,
+                period=period,
+            )
 
             findings = list(
                 (
@@ -214,6 +229,7 @@ class WeeklyBriefHandler:
                         title=result.title,
                         executive_summary=result.executive_summary,
                         sections=[],
+                        coverage=coverage,
                         published_at=now,
                     )
                 )
@@ -263,8 +279,92 @@ class WeeklyBriefHandler:
                 period=period,
                 finding_ids=frozenset(finding.id for finding in findings),
                 input_document=self._input_document(findings, period),
+                coverage=coverage,
                 initial_daily_cost=Decimal(daily_cost or 0),
             )
+
+    @staticmethod
+    async def _coverage_receipt(
+        session: AsyncSession,
+        *,
+        user_id: uuid.UUID,
+        period: WeeklyPeriod,
+    ) -> dict[str, object]:
+        runs = list(
+            (
+                await session.scalars(
+                    select(ScoutRun).where(
+                        ScoutRun.user_id == user_id,
+                        ScoutRun.run_type.in_([RunType.DAILY_SCOUT, RunType.MANUAL_SCOUT]),
+                        ScoutRun.status.in_(
+                            [
+                                ScoutRunStatus.COMPLETED,
+                                ScoutRunStatus.PARTIAL,
+                                ScoutRunStatus.FAILED,
+                            ]
+                        ),
+                        ScoutRun.scheduled_for >= period.start_utc,
+                        ScoutRun.scheduled_for < period.end_exclusive_utc,
+                    )
+                )
+            ).all()
+        )
+        competitor_ids = {run.competitor_id for run in runs if run.competitor_id is not None}
+        competitors = (
+            list(
+                (
+                    await session.scalars(
+                        select(Competitor)
+                        .where(
+                            Competitor.user_id == user_id,
+                            Competitor.id.in_(competitor_ids),
+                        )
+                        .order_by(Competitor.name, Competitor.id)
+                    )
+                ).all()
+            )
+            if competitor_ids
+            else []
+        )
+        run_ids = [run.id for run in runs]
+        inspected_source_count = (
+            int(
+                await session.scalar(
+                    select(func.count(func.distinct(EvidenceItem.source_url)))
+                    .join(
+                        EvidenceObservation,
+                        EvidenceObservation.evidence_item_id == EvidenceItem.id,
+                    )
+                    .join(AgentTask, AgentTask.id == EvidenceObservation.agent_task_id)
+                    .where(
+                        EvidenceObservation.scout_run_id.in_(run_ids),
+                        EvidenceItem.user_id == user_id,
+                        AgentTask.scout_run_id == EvidenceObservation.scout_run_id,
+                        AgentTask.status == AgentTaskStatus.SUCCEEDED,
+                    )
+                )
+                or 0
+            )
+            if run_ids
+            else 0
+        )
+        completed_count = sum(run.status is ScoutRunStatus.COMPLETED for run in runs)
+        partial_count = sum(run.status is ScoutRunStatus.PARTIAL for run in runs)
+        failed_count = sum(run.status is ScoutRunStatus.FAILED for run in runs)
+        return MonitoringCoverageReceipt(
+            competitors=[
+                CoveredCompetitor(
+                    competitor_id=competitor.id,
+                    competitor_name=competitor.name,
+                )
+                for competitor in competitors
+            ],
+            completed_scan_count=completed_count,
+            partial_scan_count=partial_count,
+            failed_scan_count=failed_count,
+            inspected_source_count=inspected_source_count,
+            coverage_complete=partial_count == 0 and failed_count == 0,
+        ).model_dump(mode="json")
 
     @staticmethod
     def _input_document(findings: list[Finding], period: WeeklyPeriod) -> dict[str, object]:
@@ -369,6 +469,7 @@ class WeeklyBriefHandler:
                     title=result.title,
                     executive_summary=result.executive_summary,
                     sections=result.model_dump(mode="json")["sections"],
+                    coverage=context.coverage,
                     published_at=completed_at,
                 )
                 .on_conflict_do_nothing(constraint="uq_weekly_briefs_user_period")

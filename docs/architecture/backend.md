@@ -46,6 +46,8 @@ Authentication and CSRF secrets are validated settings. `E2E_AUTH_SECRET` is rej
 
 Pydantic schemas are the backend's public API contract. Routes declare response models, and the web application independently validates responses with Zod. A contract change is cross-stack unless the endpoint is backend-only.
 
+`GET /api/v1/briefs/overview` is the user-scoped Weekly Digest readiness contract. It classifies setup required, setup incomplete, an initial scan in progress, the wait for a first scheduled digest, and an available archive. It returns the next Monday 08:00 user-local generation time only when active monitoring can produce one, plus active competitor and approved-source counts, relevant setup or run links, available Starting Snapshots, safe monitoring-issue counts, and the latest digest. Published brief reads include a nullable immutable monitoring-coverage receipt; `NULL` means historical coverage was not recorded. Keep these Pydantic and Zod shapes synchronized.
+
 Exception handlers convert HTTP, validation, and unexpected failures into `application/problem+json` with `type`, `title`, `status`, `detail`, and `request_id`. Keep details useful but non-sensitive. Avoid revealing that another user's resource exists.
 
 ## Persistence and migrations

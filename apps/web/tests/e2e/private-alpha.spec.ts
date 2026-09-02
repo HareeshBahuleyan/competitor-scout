@@ -166,6 +166,31 @@ test("guides a new user through sources and the first scan", async ({ page }) =>
       },
     }),
   );
+  await page.route("**/api/v1/briefs", (route) =>
+    route.fulfill({ contentType: "application/json", json: { items: [], next_cursor: null } }),
+  );
+  await page.route("**/api/v1/briefs/overview", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      json: {
+        state: "awaiting_first_digest",
+        next_digest_at: "2026-08-24T06:00:00Z",
+        active_competitor_count: 1,
+        approved_source_count: 1,
+        incomplete_competitor: null,
+        running_scan: null,
+        snapshots: [
+          {
+            snapshot_id: "55555555-5555-4555-8555-555555555555",
+            competitor_id: competitorId,
+            competitor_name: "Acme",
+          },
+        ],
+        monitoring_issue_count: 0,
+        latest_brief: null,
+      },
+    }),
+  );
 
   await page.goto("/competitors/new?first=1");
   await expect(
@@ -180,6 +205,15 @@ test("guides a new user through sources and the first scan", async ({ page }) =>
   await expect(page.getByText("Your Starting Snapshot is ready")).toBeVisible();
   await expect(page.getByText("Acme serves product teams with analytics software.")).toBeVisible();
   await expect(page.getByRole("link", { name: "Go to dashboard" })).toHaveAttribute("href", "/");
+
+  await page.goto("/briefs");
+  await expect(
+    page.getByRole("heading", { name: "Your first Weekly Digest is scheduled" }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "View Acme snapshot" })).toHaveAttribute(
+    "href",
+    `/competitors/${competitorId}#starting-snapshot`,
+  );
 });
 
 test("audits a completed run without rendering internal fields", async ({ page }) => {
@@ -391,6 +425,22 @@ test("renders a grounded weekly brief and links every reference", async ({ page 
   await mockAuthenticatedUser(page);
   const briefId = "88888888-8888-4888-8888-888888888888";
   const findingId = "55555555-5555-4555-8555-555555555555";
+  await page.route("**/api/v1/briefs/overview", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        state: "awaiting_first_digest",
+        next_digest_at: "2026-08-24T08:00:00Z",
+        active_competitor_count: 1,
+        approved_source_count: 4,
+        incomplete_competitor: null,
+        running_scan: null,
+        snapshots: [],
+        monitoring_issue_count: 0,
+        latest_brief: null,
+      },
+    });
+  });
   await page.route(`**/api/v1/briefs/${briefId}`, async (route) => {
     await route.fulfill({
       contentType: "application/json",
@@ -401,6 +451,19 @@ test("renders a grounded weekly brief and links every reference", async ({ page 
         period_end: "2026-08-16",
         title: "Weekly competitor brief",
         executive_summary: "Acme introduced annual pricing.",
+        coverage: {
+          competitors: [
+            {
+              competitor_id: "11111111-1111-4111-8111-111111111111",
+              competitor_name: "Acme",
+            },
+          ],
+          completed_scan_count: 5,
+          partial_scan_count: 0,
+          failed_scan_count: 0,
+          inspected_source_count: 4,
+          coverage_complete: true,
+        },
         sections: [
           {
             heading: "Pricing",
@@ -421,4 +484,91 @@ test("renders a grounded weekly brief and links every reference", async ({ page 
   await expect(
     page.getByRole("link", { name: "View the update and its evidence" }),
   ).toHaveAttribute("href", `/findings/${findingId}`);
+  await page.getByText("Monitoring coverage").click();
+  await expect(page.getByText("Completed scans", { exact: true })).toBeVisible();
 });
+
+for (const fixture of [
+  {
+    name: "complete",
+    briefId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    completed: 5,
+    partial: 0,
+    failed: 0,
+    complete: true,
+  },
+  {
+    name: "incomplete",
+    briefId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    completed: 4,
+    partial: 1,
+    failed: 0,
+    complete: false,
+  },
+]) {
+  test(`renders a published quiet week with ${fixture.name} coverage`, async ({ page }) => {
+    await mockAuthenticatedUser(page);
+    await page.route("**/api/v1/briefs/overview", (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        json: {
+          state: "archive_available",
+          next_digest_at: "2026-08-24T08:00:00Z",
+          active_competitor_count: 1,
+          approved_source_count: 4,
+          incomplete_competitor: null,
+          running_scan: null,
+          snapshots: [],
+          monitoring_issue_count: fixture.complete ? 0 : 1,
+          latest_brief: null,
+        },
+      }),
+    );
+    await page.route(`**/api/v1/briefs/${fixture.briefId}`, (route) =>
+      route.fulfill({
+        contentType: "application/json",
+        json: {
+          id: fixture.briefId,
+          scout_run_id: "99999999-9999-4999-8999-999999999999",
+          period_start: "2026-08-10",
+          period_end: "2026-08-16",
+          title: "No important changes found this week",
+          executive_summary:
+            "No accepted material changes were published during this weekly period.",
+          coverage: {
+            competitors: [
+              {
+                competitor_id: "11111111-1111-4111-8111-111111111111",
+                competitor_name: "Acme",
+              },
+            ],
+            completed_scan_count: fixture.completed,
+            partial_scan_count: fixture.partial,
+            failed_scan_count: fixture.failed,
+            inspected_source_count: 4,
+            coverage_complete: fixture.complete,
+          },
+          sections: [],
+          published_at: "2026-08-17T08:00:00Z",
+          created_at: "2026-08-17T08:00:00Z",
+        },
+      }),
+    );
+
+    await page.goto(`/briefs/${fixture.briefId}`);
+
+    await expect(
+      page.getByRole("heading", { level: 1, name: "No important changes found this week" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(fixture.complete ? "Complete coverage" : "Incomplete coverage", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    if (!fixture.complete) {
+      await expect(page.getByText(/may not cover every monitored source/i)).toBeVisible();
+    }
+    await page.getByText("Monitoring coverage").click();
+    await expect(page.getByText("Sources inspected", { exact: true })).toBeVisible();
+  });
+}
