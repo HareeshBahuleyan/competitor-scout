@@ -41,6 +41,8 @@ const finding = {
 const run = {
   id: finding.originating_scout_run_id,
   competitor_id: competitor.id,
+  competitor_name: competitor.name,
+  finding_count: 1,
   run_type: "daily_scout",
   status: "partial",
   scheduled_for: "2026-08-21T08:00:00Z",
@@ -105,6 +107,7 @@ function mockDashboard(data?: {
   briefs?: unknown[];
 }) {
   vi.mocked(apiGetClient).mockImplementation(async (path) => {
+    if (path === "/api/v1/me") return me as never;
     if (path.startsWith("/api/v1/competitors"))
       return { items: data?.competitors ?? [competitor], next_cursor: null } as never;
     if (path.startsWith("/api/v1/findings")) {

@@ -36,4 +36,10 @@ describe("FindingCard", () => {
     const indicator = screen.getByRole("article").querySelector('[aria-hidden="true"]');
     expect(indicator).toHaveClass("bg-[var(--color-danger)]");
   });
+
+  it("renders the publication time in the account timezone", () => {
+    render(<FindingCard finding={finding} timeZone="Europe/Berlin" />);
+
+    expect(screen.getByText(/11:00/)).toBeInTheDocument();
+  });
 });

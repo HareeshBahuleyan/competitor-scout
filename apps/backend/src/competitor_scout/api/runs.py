@@ -11,7 +11,7 @@ from competitor_scout.services.runs import (
     list_run_tasks,
     list_runs,
     owned_run,
-    run_read,
+    run_summary,
     run_usage,
 )
 
@@ -54,10 +54,10 @@ async def get_run_route(
     db: DbSession,
     user: CurrentUser,
 ) -> RunRead:
-    run = await owned_run(db, user_id=user.id, run_id=run_id)
-    if run is None:
+    summary = await run_summary(db, user_id=user.id, run_id=run_id)
+    if summary is None:
         raise run_not_found()
-    return run_read(run)
+    return summary
 
 
 @router.get("/{run_id}/tasks", response_model=CursorPage[TaskRead])

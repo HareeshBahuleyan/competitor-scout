@@ -1,5 +1,7 @@
 "use client";
 
+import { AlertDialog } from "@heroui/react";
+
 import type { Source } from "@/lib/schemas";
 
 type SourceDecision = "approved" | "rejected";
@@ -117,15 +119,53 @@ export function SourceManagementList({
 
                     <div className="flex shrink-0 gap-2">
                       {isMonitored ? (
-                        <button
-                          aria-label={`Stop monitoring ${source.title}`}
-                          className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:text-slate-400"
-                          disabled={actionsDisabled}
-                          onClick={() => void onUpdate(source.id, "rejected")}
-                          type="button"
-                        >
-                          Stop monitoring
-                        </button>
+                        monitored.length === 1 && !actionsDisabled ? (
+                          <AlertDialog>
+                            <AlertDialog.Trigger
+                              aria-label={`Stop monitoring ${source.title}`}
+                              className="inline-flex cursor-pointer items-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
+                            >
+                              Stop monitoring
+                            </AlertDialog.Trigger>
+                            <AlertDialog.Backdrop isKeyboardDismissDisabled={false}>
+                              <AlertDialog.Container placement="center" size="md">
+                                <AlertDialog.Dialog>
+                                  <AlertDialog.Header>
+                                    <AlertDialog.Icon status="warning" />
+                                    <AlertDialog.Heading>
+                                      Pause daily monitoring?
+                                    </AlertDialog.Heading>
+                                  </AlertDialog.Header>
+                                  <AlertDialog.Body>
+                                    Stopping monitoring for {source.title} leaves this competitor
+                                    without a monitored source. Daily monitoring will pause until
+                                    another source is monitored.
+                                  </AlertDialog.Body>
+                                  <AlertDialog.Footer>
+                                    <AlertDialog.CloseTrigger>Keep source</AlertDialog.CloseTrigger>
+                                    <button
+                                      className="min-h-10 rounded-lg bg-[var(--color-danger)] px-4 py-2 font-medium text-white"
+                                      onClick={() => void onUpdate(source.id, "rejected")}
+                                      type="button"
+                                    >
+                                      Stop monitoring
+                                    </button>
+                                  </AlertDialog.Footer>
+                                </AlertDialog.Dialog>
+                              </AlertDialog.Container>
+                            </AlertDialog.Backdrop>
+                          </AlertDialog>
+                        ) : (
+                          <button
+                            aria-label={`Stop monitoring ${source.title}`}
+                            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:text-slate-400"
+                            disabled={actionsDisabled}
+                            onClick={() => void onUpdate(source.id, "rejected")}
+                            type="button"
+                          >
+                            Stop monitoring
+                          </button>
+                        )
                       ) : (
                         <button
                           aria-label={`Monitor ${source.title}`}

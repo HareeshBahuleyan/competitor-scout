@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from competitor_scout.models.intelligence import (
     AgentTaskRole,
@@ -116,6 +116,8 @@ class RunRead(BaseModel):
 
     id: UUID
     competitor_id: UUID | None
+    competitor_name: str | None
+    finding_count: int = Field(ge=0)
     run_type: RunType
     status: ScoutRunStatus
     scheduled_for: datetime

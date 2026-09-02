@@ -45,6 +45,8 @@ test("guides a new user through sources and the first scan", async ({ page }) =>
   const completedRun = (id: string, runType: string) => ({
     id,
     competitor_id: competitorId,
+    competitor_name: competitor.name,
+    finding_count: 0,
     run_type: runType,
     status: "completed",
     scheduled_for: "2026-08-21T08:00:00Z",
@@ -146,6 +148,8 @@ test("audits a completed run without rendering internal fields", async ({ page }
       json: {
         id: runId,
         competitor_id: "22222222-2222-4222-8222-222222222222",
+        competitor_name: "Acme",
+        finding_count: 1,
         run_type: "manual_scout",
         status: "completed",
         scheduled_for: "2026-08-21T08:00:00Z",
@@ -187,7 +191,7 @@ test("audits a completed run without rendering internal fields", async ({ page }
 
   await page.goto(`/runs/${runId}`);
 
-  await expect(page.getByRole("heading", { name: "manual scout run" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Manual scan" })).toBeVisible();
   await expect(page.getByText("completed", { exact: true })).toBeVisible();
   await expect(page.getByText("must never render")).toHaveCount(0);
   await page.getByRole("button", { name: "Log out" }).click();
@@ -203,6 +207,8 @@ test("explains a partial run and its retries", async ({ page }) => {
       json: {
         id: runId,
         competitor_id: "22222222-2222-4222-8222-222222222222",
+        competitor_name: "Acme",
+        finding_count: 1,
         run_type: "daily_scout",
         status: "partial",
         scheduled_for: "2026-08-21T08:00:00Z",
@@ -332,7 +338,7 @@ test("renders finding evidence citations without executing untrusted quote text"
       () => (window as Window & { __evidenceExecuted?: boolean }).__evidenceExecuted,
     ),
   ).toBeUndefined();
-  await expect(page.getByRole("link", { name: "Originating run" })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "Originating scan" })).toHaveAttribute(
     "href",
     `/runs/${runId}`,
   );

@@ -7,11 +7,15 @@ import { useState } from "react";
 
 import { EvidenceList } from "@/components/EvidenceList";
 import { FindingCard } from "@/components/FindingCard";
+import { RunOutcomeSummary, runTypeLabel } from "@/components/RunOutcomeSummary";
 import { RunTimeline, type RunTimelineStep } from "@/components/RunTimeline";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { apiGetClient } from "@/lib/api";
+import { meQueryOptions } from "@/lib/current-user";
+import { formatUserDateTime, localDateBoundaryUtc } from "@/lib/dates";
 import {
   agentTaskPageSchema,
+  competitorPageSchema,
   findingEvidencePageSchema,
   findingPageSchema,
   findingSchema,
@@ -34,14 +38,14 @@ function errorText(error: unknown) {
   return error instanceof Error ? error.message : "Something went wrong.";
 }
 
-function queryString(filters: FindingFilters) {
+function queryString(filters: FindingFilters, timeZone: string) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(filters)) {
     if (!value) continue;
     if (key === "published_from" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      params.set(key, `${value}T00:00:00Z`);
+      params.set(key, localDateBoundaryUtc(value, timeZone, "start"));
     } else if (key === "published_to" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      params.set(key, `${value}T23:59:59.999Z`);
+      params.set(key, localDateBoundaryUtc(value, timeZone, "end"));
     } else {
       params.set(key, value);
     }
@@ -69,8 +73,15 @@ const significance = ["", "low", "medium", "high", "critical"];
 export function FindingsListView({ initialFilters }: { initialFilters: FindingFilters }) {
   const activeFilters = Object.entries(initialFilters).filter(([, value]) => Boolean(value));
   const [filtersOpen, setFiltersOpen] = useState(activeFilters.length > 0);
-  const suffix = queryString(initialFilters);
+  const me = useQuery(meQueryOptions);
+  const competitors = useQuery({
+    enabled: filtersOpen,
+    queryKey: ["competitors", "update-filter"],
+    queryFn: () => apiGetClient("/api/v1/competitors?limit=100", competitorPageSchema),
+  });
+  const suffix = queryString(initialFilters, me.data?.timezone ?? "UTC");
   const query = useQuery({
+    enabled: me.isSuccess,
     queryKey: ["findings", suffix],
     queryFn: () => apiGetClient(`/api/v1/findings${suffix}`, findingPageSchema),
   });
@@ -99,7 +110,11 @@ export function FindingsListView({ initialFilters }: { initialFilters: FindingFi
               className="rounded-full bg-[var(--color-accent-soft)] px-2.5 py-1 text-xs font-medium text-[var(--color-accent-strong)]"
               key={key}
             >
-              {key.replaceAll("_", " ")}: {value}
+              {key === "competitor_id" ? "competitor" : key.replaceAll("_", " ")}:{" "}
+              {key === "competitor_id"
+                ? (competitors.data?.items.find((competitor) => competitor.id === value)?.name ??
+                  "Selected competitor")
+                : value}
             </span>
           ))}
           <Link className="section-link ml-1" href="/findings">
@@ -110,13 +125,19 @@ export function FindingsListView({ initialFilters }: { initialFilters: FindingFi
       {filtersOpen ? (
         <form action="/findings" className="surface grid gap-4 p-4 sm:grid-cols-3" method="get">
           <label className="text-sm font-medium">
-            Competitor ID
-            <input
-              className="mt-1 block min-h-10 w-full rounded-xl border px-3 py-2"
+            Competitor
+            <select
+              className="select-control mt-1"
               defaultValue={initialFilters.competitor_id ?? ""}
               name="competitor_id"
-              type="text"
-            />
+            >
+              <option value="">All competitors</option>
+              {competitors.data?.items.map((competitor) => (
+                <option key={competitor.id} value={competitor.id}>
+                  {competitor.name}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="text-sm font-medium">
             Category
@@ -184,10 +205,10 @@ export function FindingsListView({ initialFilters }: { initialFilters: FindingFi
           </Button>
         </form>
       ) : null}
-      {query.isPending ? <LoadingState label="Loading findings…" rows={4} /> : null}
-      {query.isError ? (
+      {me.isPending || query.isPending ? <LoadingState label="Loading updates…" rows={4} /> : null}
+      {me.isError || query.isError || competitors.isError ? (
         <p className="text-red-700" role="alert">
-          {errorText(query.error)}
+          {errorText(me.error ?? query.error ?? competitors.error)}
         </p>
       ) : null}
       {query.data?.items.length === 0 ? (
@@ -198,7 +219,7 @@ export function FindingsListView({ initialFilters }: { initialFilters: FindingFi
       {query.data?.items.length ? (
         <div className="space-y-4">
           {query.data.items.map((finding) => (
-            <FindingCard finding={finding} key={finding.id} />
+            <FindingCard finding={finding} key={finding.id} timeZone={me.data?.timezone} />
           ))}
         </div>
       ) : null}
@@ -248,7 +269,7 @@ export function FindingDetailView({ findingId }: { findingId: string }) {
           className="section-link mt-4 inline-block"
           href={`/runs/${finding.data.originating_scout_run_id}`}
         >
-          Originating run
+          Originating scan
         </Link>
       </section>
       {evidence.data.items.length ? (
@@ -260,14 +281,13 @@ export function FindingDetailView({ findingId }: { findingId: string }) {
   );
 }
 
-function runLabel(value: string) {
-  return value.replaceAll("_", " ");
-}
-
-export function RunsListView() {
+export function RunsListView({ competitorId }: { competitorId?: string } = {}) {
+  const me = useQuery(meQueryOptions);
+  const suffix = competitorId ? `?competitor_id=${encodeURIComponent(competitorId)}` : "";
   const query = useQuery({
-    queryKey: ["runs"],
-    queryFn: () => apiGetClient("/api/v1/runs", runPageSchema),
+    enabled: me.isSuccess,
+    queryKey: ["runs", competitorId ?? "all"],
+    queryFn: () => apiGetClient(`/api/v1/runs${suffix}`, runPageSchema),
   });
   return (
     <section className="space-y-6">
@@ -279,10 +299,10 @@ export function RunsListView() {
           troubleshooting when an update looks missing or a scan reports a problem.
         </p>
       </div>
-      {query.isPending ? <LoadingState label="Loading runs…" rows={4} /> : null}
-      {query.isError ? (
+      {me.isPending || query.isPending ? <LoadingState label="Loading scans…" rows={4} /> : null}
+      {me.isError || query.isError ? (
         <p className="text-red-700" role="alert">
-          {errorText(query.error)}
+          {errorText(me.error ?? query.error)}
         </p>
       ) : null}
       {query.data?.items.length === 0 ? (
@@ -294,15 +314,21 @@ export function RunsListView() {
             <li className="surface surface-interactive p-5" key={run.id}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <Link className="font-semibold capitalize hover:underline" href={`/runs/${run.id}`}>
-                  {runLabel(run.run_type)} scan
+                  {runTypeLabel(run.run_type)}
                 </Link>
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-sm capitalize">
                   {run.status}
                 </span>
               </div>
-              <time className="mt-2 block text-sm text-slate-500" dateTime={run.created_at}>
-                {new Date(run.created_at).toLocaleString("en-US", { timeZone: "UTC" })}
-              </time>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
+                <span>{run.competitor_name ?? "Account-wide"}</span>
+                <span>
+                  {run.finding_count} update{run.finding_count === 1 ? "" : "s"}
+                </span>
+                <time dateTime={run.created_at}>
+                  {formatUserDateTime(run.created_at, me.data?.timezone ?? "UTC")}
+                </time>
+              </div>
             </li>
           ))}
         </ul>
@@ -320,6 +346,7 @@ function lifecycle(run: Run): RunTimelineStep[] {
 }
 
 export function RunDetailView({ runId }: { runId: string }) {
+  const me = useQuery(meQueryOptions);
   const run = useQuery({
     queryKey: ["run", runId],
     queryFn: () => apiGetClient(`/api/v1/runs/${runId}`, runSchema),
@@ -332,13 +359,13 @@ export function RunDetailView({ runId }: { runId: string }) {
     queryKey: ["run-usage", runId],
     queryFn: () => apiGetClient(`/api/v1/runs/${runId}/usage`, runUsageSchema),
   });
-  if (run.isPending || tasks.isPending || usage.isPending) {
-    return <LoadingState label="Loading run…" rows={4} />;
+  if (me.isPending || run.isPending || tasks.isPending || usage.isPending) {
+    return <LoadingState label="Loading scan…" rows={4} />;
   }
-  if (run.isError || tasks.isError || usage.isError)
+  if (me.isError || run.isError || tasks.isError || usage.isError)
     return (
       <p className="text-red-700" role="alert">
-        {errorText(run.error ?? tasks.error ?? usage.error)}
+        {errorText(me.error ?? run.error ?? tasks.error ?? usage.error)}
       </p>
     );
   const retries = tasks.data.items.reduce(
@@ -347,19 +374,13 @@ export function RunDetailView({ runId }: { runId: string }) {
   );
   return (
     <article className="max-w-4xl space-y-8">
-      <header>
-        <p className="eyebrow">{run.data.status}</p>
-        <h1 className="mt-2 text-4xl font-semibold capitalize">
-          {runLabel(run.data.run_type)} run
-        </h1>
-      </header>
+      <RunOutcomeSummary run={run.data} timeZone={me.data.timezone} />
       <RunTimeline
         failure_reason={run.data.failure_summary}
-        partial_reasons={run.data.partial_reasons}
-        partial_summaries={run.data.partial_summaries}
         retry_count={retries}
         status={run.data.status}
         steps={lifecycle(run.data)}
+        timeZone={me.data.timezone}
         usage={usage.data}
       />
       <section aria-labelledby="tasks-heading" className="space-y-3">

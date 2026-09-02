@@ -30,6 +30,8 @@ const finding = {
 const run = {
   id: "44444444-4444-4444-8444-444444444444",
   competitor_id: finding.competitor_id,
+  competitor_name: "Acme",
+  finding_count: 1,
   run_type: "daily_scout",
   status: "partial",
   scheduled_for: "2026-08-21T08:00:00Z",
@@ -47,12 +49,36 @@ const run = {
   raw_response: "SECRET",
   prompt: "DO NOT RENDER",
 };
+const competitor = {
+  id: finding.competitor_id,
+  name: "Acme",
+  primary_domain: "acme.example",
+  description: "Widgets",
+  status: "active",
+  daily_run_time_local: "08:00:00",
+  created_at: "2026-08-21T08:00:00Z",
+  updated_at: "2026-08-21T08:00:00Z",
+};
+const me = {
+  id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  email: "owner@example.com",
+  display_name: "Owner",
+  avatar_url: null,
+  timezone: "Europe/Berlin",
+  csrf_token: "csrf",
+};
 
 afterEach(() => vi.clearAllMocks());
 
 describe("findings pages", () => {
   it("keeps advanced filters behind an accessible disclosure", async () => {
-    vi.mocked(apiGetClient).mockResolvedValueOnce({ items: [], next_cursor: null } as never);
+    vi.mocked(apiGetClient).mockImplementation(async (path) => {
+      if (path === "/api/v1/me") return me as never;
+      if (path.startsWith("/api/v1/competitors"))
+        return { items: [competitor], next_cursor: null } as never;
+      if (path.startsWith("/api/v1/findings")) return { items: [], next_cursor: null } as never;
+      throw new Error(`unexpected GET ${path}`);
+    });
 
     renderWithQuery(<FindingsListView initialFilters={{}} />);
 
@@ -60,14 +86,23 @@ describe("findings pages", () => {
     expect(screen.queryByLabelText("Category")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Filters" }));
     expect(screen.getByLabelText("Category")).toBeVisible();
+    expect(await screen.findByRole("option", { name: "Acme" })).toHaveValue(competitor.id);
   });
 
   it("shows finding cards, filters, empty state, and errors", async () => {
-    vi.mocked(apiGetClient).mockResolvedValueOnce({ items: [finding], next_cursor: null } as never);
+    vi.mocked(apiGetClient).mockImplementation(async (path) => {
+      if (path === "/api/v1/me") return me as never;
+      if (path.startsWith("/api/v1/competitors"))
+        return { items: [competitor], next_cursor: null } as never;
+      if (path.startsWith("/api/v1/findings"))
+        return { items: [finding], next_cursor: null } as never;
+      throw new Error(`unexpected GET ${path}`);
+    });
     const success = renderWithQuery(
       <FindingsListView
         initialFilters={{
           category: "pricing",
+          competitor_id: competitor.id,
           published_from: "2026-08-20",
           published_to: "2026-08-21",
         }}
@@ -78,21 +113,29 @@ describe("findings pages", () => {
       `/findings/${finding.id}`,
     );
     expect(screen.getByLabelText("Category")).toHaveValue("pricing");
-    expect(screen.getByLabelText("Competitor ID")).toHaveAttribute("name", "competitor_id");
+    expect(screen.getByLabelText("Competitor")).toHaveAttribute("name", "competitor_id");
+    expect(screen.getByText("competitor: Acme")).toBeInTheDocument();
     expect(screen.getByLabelText("Published from")).toHaveAttribute("name", "published_from");
     expect(screen.getByLabelText("Published to")).toHaveAttribute("name", "published_to");
     expect(apiGetClient).toHaveBeenCalledWith(
-      "/api/v1/findings?category=pricing&published_from=2026-08-20T00%3A00%3A00Z&published_to=2026-08-21T23%3A59%3A59.999Z",
+      `/api/v1/findings?category=pricing&competitor_id=${competitor.id}&published_from=2026-08-19T22%3A00%3A00.000Z&published_to=2026-08-21T21%3A59%3A59.999Z`,
       expect.anything(),
     );
     success.unmount();
 
-    vi.mocked(apiGetClient).mockResolvedValueOnce({ items: [], next_cursor: null } as never);
+    vi.mocked(apiGetClient).mockImplementation(async (path) => {
+      if (path === "/api/v1/me") return me as never;
+      if (path.startsWith("/api/v1/findings")) return { items: [], next_cursor: null } as never;
+      throw new Error(`unexpected GET ${path}`);
+    });
     const empty = renderWithQuery(<FindingsListView initialFilters={{}} />);
     expect(await screen.findByText("No findings match these filters.")).toBeInTheDocument();
     empty.unmount();
 
-    vi.mocked(apiGetClient).mockRejectedValueOnce(new Error("findings unavailable"));
+    vi.mocked(apiGetClient).mockImplementation(async (path) => {
+      if (path === "/api/v1/me") return me as never;
+      throw new Error("findings unavailable");
+    });
     renderWithQuery(<FindingsListView initialFilters={{}} />);
     expect(await screen.findByRole("alert")).toHaveTextContent("findings unavailable");
   });
@@ -129,7 +172,7 @@ describe("findings pages", () => {
       "https://acme.example/pricing",
     );
     expect(document.querySelector("script")).toBeNull();
-    expect(screen.getByRole("link", { name: "Originating run" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Originating scan" })).toHaveAttribute(
       "href",
       `/runs/${run.id}`,
     );
@@ -139,25 +182,41 @@ describe("findings pages", () => {
 
 describe("run pages", () => {
   it("shows run rows, empty state, and errors", async () => {
-    vi.mocked(apiGetClient).mockResolvedValueOnce({ items: [run], next_cursor: null } as never);
-    const success = renderWithQuery(<RunsListView />);
-    expect(await screen.findByRole("link", { name: /daily scout/i })).toHaveAttribute(
+    vi.mocked(apiGetClient).mockImplementation(async (path) => {
+      if (path === "/api/v1/me") return me as never;
+      return { items: [run], next_cursor: null } as never;
+    });
+    const success = renderWithQuery(<RunsListView competitorId={competitor.id} />);
+    expect(await screen.findByRole("link", { name: /daily scan/i })).toHaveAttribute(
       "href",
       `/runs/${run.id}`,
     );
+    expect(screen.getByText("Acme")).toBeInTheDocument();
+    expect(screen.getByText("1 update")).toBeInTheDocument();
     expect(screen.getByText("partial")).toBeInTheDocument();
+    expect(apiGetClient).toHaveBeenCalledWith(
+      `/api/v1/runs?competitor_id=${competitor.id}`,
+      expect.anything(),
+    );
     success.unmount();
-    vi.mocked(apiGetClient).mockResolvedValueOnce({ items: [], next_cursor: null } as never);
+    vi.mocked(apiGetClient).mockImplementation(async (path) => {
+      if (path === "/api/v1/me") return me as never;
+      return { items: [], next_cursor: null } as never;
+    });
     const empty = renderWithQuery(<RunsListView />);
     expect(await screen.findByText("No scans yet.")).toBeInTheDocument();
     empty.unmount();
-    vi.mocked(apiGetClient).mockRejectedValueOnce(new Error("runs unavailable"));
+    vi.mocked(apiGetClient).mockImplementation(async (path) => {
+      if (path === "/api/v1/me") return me as never;
+      throw new Error("runs unavailable");
+    });
     renderWithQuery(<RunsListView />);
     expect(await screen.findByRole("alert")).toHaveTextContent("runs unavailable");
   });
 
   it("renders lifecycle, partial reasons, safe tasks, and unknown usage without secrets", async () => {
     vi.mocked(apiGetClient).mockImplementation(async (path) => {
+      if (path === "/api/v1/me") return me as never;
       if (path.endsWith("/tasks"))
         return {
           items: [
@@ -199,7 +258,9 @@ describe("run pages", () => {
       return run as never;
     });
     renderWithQuery(<RunDetailView runId={run.id} />);
-    expect(await screen.findByRole("heading", { name: /daily scout run/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /daily scan/i })).toBeInTheDocument();
+    expect(screen.getByText("Acme")).toBeInTheDocument();
+    expect(screen.getByText("1 update published")).toBeInTheDocument();
     expect(screen.getByText("Source unavailable")).toBeInTheDocument();
     expect(screen.getByText("Review first-party pricing")).toBeInTheDocument();
     expect(

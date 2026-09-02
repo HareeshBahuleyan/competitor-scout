@@ -1,3 +1,4 @@
+import { formatUserDateTime } from "@/lib/dates";
 import { partialReasonLabels } from "@/lib/runs";
 
 export type RunStatus =
@@ -23,23 +24,12 @@ type RunTimelineProps = {
   status: RunStatus;
   steps: readonly RunTimelineStep[];
   usage?: RunUsage | null;
+  timeZone?: string;
 };
 
 function humanize(value: string) {
   const words = value.replaceAll("_", " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
-function formatTimestamp(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    month: "short",
-    timeZone: "UTC",
-    timeZoneName: "short",
-    year: "numeric",
-  }).format(new Date(value));
 }
 
 function knownNumber(value: number | null | undefined) {
@@ -63,6 +53,7 @@ export function RunTimeline({
   retry_count: retryCount,
   status,
   steps,
+  timeZone = "UTC",
   usage,
 }: RunTimelineProps) {
   const orderedSteps = [...steps].sort(
@@ -74,7 +65,7 @@ export function RunTimeline({
     <section aria-labelledby="run-timeline-heading" className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-semibold" id="run-timeline-heading">
-          Run timeline
+          Scan timeline
         </h2>
         <span
           className={`rounded-full px-3 py-1 text-sm font-medium ${
@@ -91,7 +82,7 @@ export function RunTimeline({
         </span>
       </div>
 
-      <ol aria-label="Run lifecycle" className="space-y-3 border-l-2 border-slate-200 pl-5">
+      <ol aria-label="Scan lifecycle" className="space-y-3 border-l-2 border-slate-200 pl-5">
         {orderedSteps.map((step, index) => (
           <li className="relative" key={`${step.state}-${step.occurred_at}-${index}`}>
             <span
@@ -100,7 +91,7 @@ export function RunTimeline({
             />
             <p className="font-medium text-slate-950">{humanize(step.state)}</p>
             <time className="text-sm text-slate-500" dateTime={step.occurred_at}>
-              {formatTimestamp(step.occurred_at)}
+              {formatUserDateTime(step.occurred_at, timeZone)}
             </time>
           </li>
         ))}
@@ -120,7 +111,7 @@ export function RunTimeline({
       {failureReason ? (
         <div>
           <h3 className="font-semibold">Failure reason</h3>
-          <p className="mt-2 text-sm text-slate-700">{humanize(failureReason)}</p>
+          <p className="mt-2 text-sm text-slate-700">{failureReason}</p>
         </div>
       ) : null}
 

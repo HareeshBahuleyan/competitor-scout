@@ -25,7 +25,7 @@ describe("RunTimeline", () => {
       />,
     );
 
-    const lifecycle = within(screen.getByRole("list", { name: "Run lifecycle" }));
+    const lifecycle = within(screen.getByRole("list", { name: "Scan lifecycle" }));
     const steps = lifecycle.getAllByRole("listitem");
     expect(steps.map((step) => step.textContent)).toEqual([
       expect.stringContaining("Queued"),
@@ -61,7 +61,7 @@ describe("RunTimeline", () => {
   it("shows a failed reason and unknown usage without inventing totals", () => {
     render(
       <RunTimeline
-        failure_reason="otari_authentication_error"
+        failure_reason="Authentication failed."
         retry_count={0}
         status="failed"
         steps={outOfOrderSteps.slice(0, 1)}
@@ -69,7 +69,7 @@ describe("RunTimeline", () => {
     );
 
     expect(screen.getByText("Failed")).toBeVisible();
-    expect(screen.getByText("Otari authentication error")).toBeVisible();
+    expect(screen.getByText("Authentication failed.")).toBeVisible();
     expect(screen.getByText("Input tokens")).toHaveTextContent("Unknown");
     expect(screen.getByText("Output tokens")).toHaveTextContent("Unknown");
     expect(screen.getByText("Latency")).toHaveTextContent("Unknown");

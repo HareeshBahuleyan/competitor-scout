@@ -136,6 +136,14 @@ A competitor's sources are settings, not a review queue, so the detail page neve
 
 Copy states the consequence next to the control: removing the last monitored source pauses daily monitoring, because the backend returns the competitor to discovering when no approved source remains. A source added from the detail page arrives awaiting review rather than silently entering the next scan.
 
+Stopping the last monitored source requires an alert-dialog confirmation. The confirmation names the consequence before applying the existing source-status mutation; it does not introduce a separate pause mechanism.
+
+### Monitor settings and local time
+
+`MonitorSettings` owns the competitor-level controls on the detail page: name, description, local daily scan time, pause/resume, and archive. Source entry and source-state changes remain in the source-management section so the interface does not offer duplicate controls for the same operation. Archiving requires confirmation and explains that existing updates and scan history are retained.
+
+Authenticated timestamps render in the account timezone. Date-only filters represent the reader's local calendar day, so the client converts their start and end boundaries to UTC before calling the API, including across daylight-saving transitions. Scan summaries lead with the competitor name, published-update count, and backend-authored outcome copy; lifecycle and task detail remain available on the diagnostic scan page.
+
 ## Forms and interaction
 
 - Give every control a visible label or an equivalent accessible name.

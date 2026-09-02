@@ -9,6 +9,7 @@ import { CompetitorFavicon } from "@/components/CompetitorFavicon";
 import { FindingCard } from "@/components/FindingCard";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { apiGetClient } from "@/lib/api";
+import { meQueryOptions } from "@/lib/current-user";
 import {
   competitorPageSchema,
   findingPageSchema,
@@ -29,6 +30,7 @@ function latestRunFor(competitorId: string, runs: Run[]) {
 
 export function DashboardView() {
   const router = useRouter();
+  const me = useQuery(meQueryOptions);
   const competitors = useQuery({
     queryKey: ["dashboard", "competitors"],
     queryFn: () => apiGetClient("/api/v1/competitors?limit=100", competitorPageSchema),
@@ -60,7 +62,7 @@ export function DashboardView() {
     }
   }, [competitors.data?.items.length, router]);
 
-  const queries = [competitors, criticalFindings, highFindings, mediumFindings, runs, briefs];
+  const queries = [me, competitors, criticalFindings, highFindings, mediumFindings, runs, briefs];
   if (queries.some((query) => query.isPending)) {
     return <LoadingState label="Loading dashboard…" rows={5} />;
   }
@@ -84,7 +86,8 @@ export function DashboardView() {
     !highFindingPage ||
     !mediumFindingPage ||
     !runPage ||
-    !briefPage
+    !briefPage ||
+    !me.data
   ) {
     return (
       <p className="text-red-700" role="alert">
@@ -143,7 +146,7 @@ export function DashboardView() {
           {materialFindings.length ? (
             <div className="space-y-3">
               {materialFindings.map((item) => (
-                <FindingCard finding={item} key={item.id} />
+                <FindingCard finding={item} key={item.id} timeZone={me.data.timezone} />
               ))}
             </div>
           ) : (

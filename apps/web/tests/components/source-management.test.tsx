@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { SourceManagementList } from "@/components/SourceManagementList";
 import type { Source } from "@/lib/schemas";
@@ -23,14 +24,29 @@ const changelogSource: Source = {
 };
 
 describe("SourceManagementList", () => {
-  it("removes an already monitored source from future scans", () => {
+  it("confirms before removing the last monitored source", async () => {
+    const user = userEvent.setup();
     const onUpdate = vi.fn();
     render(<SourceManagementList onUpdate={onUpdate} sources={[pricingSource]} />);
 
     expect(screen.queryByRole("button", { name: "Monitor Pricing" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Stop monitoring Pricing" }));
+
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("Daily monitoring will pause");
+    await user.click(screen.getByRole("button", { name: /^Stop monitoring$/ }));
+
+    expect(onUpdate).toHaveBeenCalledWith(pricingSource.id, "rejected");
+  });
+
+  it("removes a monitored source immediately when another one remains", () => {
+    const onUpdate = vi.fn();
+    render(<SourceManagementList onUpdate={onUpdate} sources={[pricingSource, changelogSource]} />);
+
     fireEvent.click(screen.getByRole("button", { name: "Stop monitoring Pricing" }));
 
     expect(onUpdate).toHaveBeenCalledWith(pricingSource.id, "rejected");
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   });
 
   it("restores a source that is not monitored", () => {

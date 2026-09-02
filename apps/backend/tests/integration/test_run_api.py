@@ -10,6 +10,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from competitor_scout.agents.contracts import FindingCategory, SignificanceLevel
 from competitor_scout.api.deps import authenticated_session, require_csrf
 from competitor_scout.config import Settings
 from competitor_scout.main import create_app
@@ -21,6 +22,7 @@ from competitor_scout.models.intelligence import (
     ApprovalStatus,
     Competitor,
     CompetitorStatus,
+    Finding,
     MonitoredSource,
     RunType,
     ScoutRun,
@@ -409,6 +411,25 @@ async def seed_run_api_detail(sessions) -> tuple[User, User, ScoutRun]:
         )
         session.add_all([child, planner])
         await session.flush()
+        session.add(
+            Finding(
+                user_id=owner.id,
+                competitor_id=competitor.id,
+                originating_scout_run_id=run.id,
+                category=FindingCategory.PRICING,
+                title="Pricing changed",
+                summary="A synthetic finding.",
+                significance_explanation="Material pricing change.",
+                significance_level=SignificanceLevel.HIGH,
+                confidence=Decimal("0.9000"),
+                decision_rationale="Synthetic test rationale.",
+                normalized_claim_fingerprint=uuid.uuid4().hex,
+                duplicate_key=uuid.uuid4().hex,
+                first_seen_at=NOW,
+                last_seen_at=NOW,
+                published_at=NOW,
+            )
+        )
         session.add_all(
             [
                 UsageEvent(
@@ -494,6 +515,8 @@ async def test_run_read_apis_are_filtered_cursor_paginated_and_safe(run_store) -
     assert set(detail.json()) == {
         "id",
         "competitor_id",
+        "competitor_name",
+        "finding_count",
         "run_type",
         "status",
         "scheduled_for",
@@ -510,6 +533,10 @@ async def test_run_read_apis_are_filtered_cursor_paginated_and_safe(run_store) -
         "created_at",
     }
     assert detail.json()["status"] == "partial"
+    assert detail.json()["competitor_name"].startswith("Competitor ")
+    assert detail.json()["finding_count"] == 1
+    assert filtered.json()["items"][0]["competitor_name"] == detail.json()["competitor_name"]
+    assert filtered.json()["items"][0]["finding_count"] == 1
     assert detail.json()["partial_reasons"] == ["child_task_failed"]
     assert detail.json()["partial_summaries"] == ["Some research tasks could not complete."]
     assert detail.json()["failure_summary"] is None
