@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from competitor_scout.agents.client import OtariError
 from competitor_scout.agents.contracts import DiscoveredSource
+from competitor_scout.agents.costs import CostEstimateRole
 from competitor_scout.agents.orchestrator import SourceDiscoveryOutcome
 from competitor_scout.config import Settings
 from competitor_scout.db import SessionFactory
@@ -32,7 +33,7 @@ from competitor_scout.models.intelligence import (
 )
 
 type Clock = Callable[[], datetime]
-type CostEstimator = Callable[[str, int, bool], Decimal | None]
+type CostEstimator = Callable[[CostEstimateRole], Decimal | None]
 
 
 class DiscoveryService(Protocol):
@@ -301,11 +302,7 @@ class SourceDiscoveryHandler:
         if self._cost_estimator is None:
             return None
         try:
-            estimate = self._cost_estimator(
-                self._settings.otari_main_model,
-                self._settings.main_output_token_limit,
-                True,
-            )
+            estimate = self._cost_estimator("main")
             if estimate is None:
                 return None
             normalized = Decimal(estimate)

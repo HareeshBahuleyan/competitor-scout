@@ -14,6 +14,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import selectinload
 
 from competitor_scout.agents.client import OtariMetadata
+from competitor_scout.agents.costs import CostEstimateRole
 from competitor_scout.agents.session_labels import scout_run_session_label
 from competitor_scout.config import Settings
 from competitor_scout.db import SessionFactory
@@ -34,7 +35,7 @@ from competitor_scout.schemas.briefs import WeeklyBriefResult, empty_weekly_brie
 
 MAX_BRIEF_FINDINGS = 100
 MAX_EVIDENCE_PER_FINDING = 10
-type CostEstimator = Callable[[str, int, bool], Decimal | None]
+type CostEstimator = Callable[[CostEstimateRole], Decimal | None]
 
 
 class BriefClient(Protocol):
@@ -436,11 +437,7 @@ class WeeklyBriefHandler:
         if self._cost_estimator is None:
             return False
         try:
-            estimate = self._cost_estimator(
-                self._settings.otari_main_model,
-                self._settings.main_output_token_limit,
-                False,
-            )
+            estimate = self._cost_estimator("main")
             if estimate is None:
                 return False
             estimate = Decimal(estimate)

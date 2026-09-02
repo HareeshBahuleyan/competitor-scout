@@ -167,6 +167,7 @@ class FakeOtari:
         *,
         task_count: int,
         fail_children: set[int] | None = None,
+        budget_children: set[int] | None = None,
         planning_schema_failures: int = 0,
         synthesis_schema_failures: int = 0,
         known_cost: Decimal | None = None,
@@ -176,6 +177,7 @@ class FakeOtari:
     ) -> None:
         self.plan = plan(task_count)
         self.fail_children = fail_children or set()
+        self.budget_children = budget_children or set()
         self.planning_schema_failures = planning_schema_failures
         self.synthesis_schema_failures = synthesis_schema_failures
         self.known_cost = known_cost
@@ -210,6 +212,8 @@ class FakeOtari:
                 if self.active_children >= target:
                     self.child_gate.set()
                 await asyncio.wait_for(self.child_gate.wait(), timeout=1)
+                if index in self.budget_children:
+                    raise OtariError("otari_budget_exceeded", retryable=False, status_code=403)
                 if index in self.fail_children:
                     raise OtariError("otari_upstream_error", retryable=True)
                 if payload["task"]["kind"] == "first_party_source_review":
@@ -339,7 +343,7 @@ async def make_orchestrator(
     fake: FakeOtari,
     configured: Settings,
     *,
-    cost_estimator: Callable[[str, int, bool], Decimal | None] | None = None,
+    cost_estimator: Callable[[str], Decimal | None] | None = None,
 ) -> ScoutOrchestrator:
     return ScoutOrchestrator(
         session_factory=sessions,
@@ -727,6 +731,37 @@ async def test_all_children_failing_means_no_evidence_and_failed_run(daily_store
     assert not any(call["output_type"] is SynthesisResult for call in fake.calls)
 
 
+async def test_otari_budget_exhaustion_stops_unstarted_child_waves(daily_store) -> None:
+    sessions = daily_store
+    _user_id, _competitor_id, run_id = await seed_daily_run(sessions)
+    fake = FakeOtari(task_count=5, budget_children={0})
+    orchestrator = await make_orchestrator(sessions, fake, settings())
+
+    status = await orchestrator.execute_daily_run(run_id)
+
+    async with sessions() as session:
+        run = await session.get(ScoutRun, run_id)
+        failed = await session.scalar(
+            select(AgentTask).where(
+                AgentTask.scout_run_id == run_id,
+                AgentTask.error_code == "otari_budget_exceeded",
+            )
+        )
+        cancelled = await session.scalar(
+            select(AgentTask).where(
+                AgentTask.scout_run_id == run_id,
+                AgentTask.status == AgentTaskStatus.CANCELLED,
+            )
+        )
+
+    assert status is ScoutRunStatus.PARTIAL
+    assert run is not None and run.partial_reasons == ["otari_budget_exceeded"]
+    assert failed is not None and failed.status is AgentTaskStatus.FAILED
+    assert cancelled is not None and cancelled.error_code == "otari_budget_exceeded"
+    assert len(fake.child_attempts) == 4
+    assert not any(call["output_type"] is SynthesisResult for call in fake.calls)
+
+
 async def test_known_planning_cost_at_run_limit_stops_before_children(daily_store) -> None:
     sessions = daily_store
     _user_id, _competitor_id, run_id = await seed_daily_run(sessions)
@@ -806,7 +841,7 @@ async def test_estimated_request_over_run_ceiling_stops_before_otari(daily_store
         sessions,
         fake,
         settings(max_run_cost_usd=Decimal("0.10")),
-        cost_estimator=lambda _model, _tokens, _web: Decimal("0.20"),
+        cost_estimator=lambda _role: Decimal("0.20"),
     )
 
     status = await orchestrator.execute_daily_run(run_id)
@@ -866,7 +901,7 @@ async def test_estimated_request_over_remaining_daily_ceiling_stops_pre_call(
             max_run_cost_usd=Decimal("1.00"),
             max_user_daily_cost_usd=Decimal("5.00"),
         ),
-        cost_estimator=lambda _model, _tokens, _web: Decimal("0.20"),
+        cost_estimator=lambda _role: Decimal("0.20"),
     )
 
     status = await orchestrator.execute_daily_run(run_id)
@@ -883,8 +918,8 @@ async def test_estimated_child_request_stops_before_child_call(daily_store) -> N
     _user_id, _competitor_id, run_id = await seed_daily_run(sessions)
     fake = FakeOtari(task_count=1)
 
-    def estimate(model: str, _tokens: int, _web: bool) -> Decimal:
-        return Decimal("0.05") if model.endswith("main") else Decimal("0.20")
+    def estimate(role: str) -> Decimal:
+        return Decimal("0.05") if role == "main" else Decimal("0.20")
 
     orchestrator = await make_orchestrator(
         sessions,
@@ -916,8 +951,8 @@ async def test_estimated_synthesis_request_stops_before_synthesis_call(
     fake = FakeOtari(task_count=1)
     main_estimates = iter((Decimal("0.02"), Decimal("0.20")))
 
-    def estimate(model: str, _tokens: int, _web: bool) -> Decimal:
-        if model.endswith("child"):
+    def estimate(role: str) -> Decimal:
+        if role == "child":
             return Decimal("0.02")
         return next(main_estimates)
 
@@ -959,7 +994,7 @@ async def test_invalid_or_unavailable_cost_estimates_do_not_claim_a_known_guard(
         sessions,
         fake,
         settings(),
-        cost_estimator=lambda _model, _tokens, _web: estimate,  # type: ignore[return-value]
+        cost_estimator=lambda _role: estimate,  # type: ignore[return-value]
     )
 
     assert await orchestrator.execute_daily_run(run_id) is ScoutRunStatus.COMPLETED

@@ -24,6 +24,7 @@ from competitor_scout.agents.contracts import (
     SourceDiscoveryResult,
     SynthesisResult,
 )
+from competitor_scout.agents.costs import CostEstimateRole
 from competitor_scout.agents.prompts import (
     PROMPT_VERSION,
     UNTRUSTED_SOURCE_POLICY,
@@ -60,7 +61,7 @@ from competitor_scout.services.findings import PublicationValidationError, publi
 
 type UrlValidator = Callable[[str], Awaitable[str]]
 type Sleeper = Callable[[float], Awaitable[None]]
-type CostEstimator = Callable[[str, int, bool], Decimal | None]
+type CostEstimator = Callable[[CostEstimateRole], Decimal | None]
 
 
 class FindingPublisher(Protocol):
@@ -188,7 +189,7 @@ class _ChildOutcome:
     metadata: tuple[OtariMetadata, ...] = ()
     failed: bool = False
     unsettled_attempt: bool = False
-    cost_stopped: bool = False
+    budget_stop_code: str | None = None
 
 
 class ScoutOrchestrator:
@@ -246,11 +247,16 @@ class ScoutOrchestrator:
                 )
             )
             outcomes.extend(wave_outcomes)
-            if any(outcome.cost_stopped for outcome in wave_outcomes):
+            stop_codes = [
+                outcome.budget_stop_code
+                for outcome in wave_outcomes
+                if outcome.budget_stop_code is not None
+            ]
+            if stop_codes:
+                budget_reason = stop_codes[0]
                 remaining_ids = [task_id for task_id, _planned in children[offset + wave_size :]]
-                await self._cancel_tasks(remaining_ids, "cost_ceiling_reached")
+                await self._cancel_tasks(remaining_ids, budget_reason)
                 budget_stopped = True
-                budget_reason = "cost_ceiling_reached"
             for outcome in wave_outcomes:
                 for metadata in outcome.metadata:
                     usage.add(metadata)
@@ -540,9 +546,7 @@ class ScoutOrchestrator:
             if self._request_would_exceed_cost_ceiling(
                 context,
                 usage,
-                model=self._settings.otari_main_model,
-                max_completion_tokens=self._settings.main_output_token_limit,
-                enable_web_search=False,
+                role="main",
             ):
                 await self._cancel_tasks(
                     [context.planner_task_id],
@@ -677,12 +681,10 @@ class ScoutOrchestrator:
                     if self._request_would_exceed_cost_ceiling(
                         context,
                         usage,
-                        model=self._settings.otari_child_model,
-                        max_completion_tokens=self._settings.child_output_token_limit,
-                        enable_web_search=True,
+                        role="child",
                     ):
                         await self._cancel_tasks([task_id], "cost_ceiling_reached")
-                        return _ChildOutcome(cost_stopped=True)
+                        return _ChildOutcome(budget_stop_code="cost_ceiling_reached")
                     messages = child_messages(
                         {
                             "task": planned.model_dump(mode="json"),
@@ -745,6 +747,7 @@ class ScoutOrchestrator:
                         metadata=tuple(metadata_records),
                         failed=True,
                         unsettled_attempt=unsettled,
+                        budget_stop_code=(code if code == "otari_budget_exceeded" else None),
                     )
                 if metadata is None:
                     raise RuntimeError("child response metadata was not resolved")
@@ -936,9 +939,7 @@ class ScoutOrchestrator:
             if self._request_would_exceed_cost_ceiling(
                 context,
                 usage,
-                model=self._settings.otari_main_model,
-                max_completion_tokens=self._settings.main_output_token_limit,
-                enable_web_search=False,
+                role="main",
             ):
                 await self._cancel_tasks([task_id], "cost_ceiling_reached")
                 await self._finish_run(
@@ -1238,18 +1239,12 @@ class ScoutOrchestrator:
         context: _RunContext,
         usage: _UsageAccumulator,
         *,
-        model: str,
-        max_completion_tokens: int,
-        enable_web_search: bool,
+        role: CostEstimateRole,
     ) -> bool:
         if self._cost_estimator is None:
             return False
         try:
-            estimate = self._cost_estimator(
-                model,
-                max_completion_tokens,
-                enable_web_search,
-            )
+            estimate = self._cost_estimator(role)
             if estimate is None:
                 return False
             estimate = Decimal(estimate)

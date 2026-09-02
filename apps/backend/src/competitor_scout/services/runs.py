@@ -69,6 +69,7 @@ _RUN_SUMMARIES = {
     "daily_cost_limit": "The daily usage limit was reached.",
     "main_input_token_limit": "The scan input exceeded its configured limit.",
     "no_valid_evidence": "No valid evidence was available for this scan.",
+    "otari_budget_exceeded": "The configured Otari budget was reached.",
     "otari_tool_iteration_limit": "Source discovery exhausted its web search budget.",
     "planning_timeout": "Scan planning timed out.",
     "publication_failed": "Validated updates could not be published.",
@@ -79,6 +80,7 @@ _PARTIAL_SUMMARIES = {
     "child_task_failed": "Some research tasks could not complete.",
     "cost_ceiling_reached": "The scan stopped before exceeding a usage limit.",
     "insufficient_sources": "No usable sources were discovered.",
+    "otari_budget_exceeded": "The scan stopped after reaching the configured Otari budget.",
     "run_cost_limit": "The scan usage limit was reached.",
 }
 _TASK_SUMMARIES = {
@@ -87,6 +89,7 @@ _TASK_SUMMARIES = {
     "child_timeout": "The research task timed out.",
     "cost_ceiling_reached": "The task was cancelled before exceeding a usage limit.",
     "main_input_token_limit": "The task input exceeded its configured limit.",
+    "otari_budget_exceeded": "The configured Otari budget was reached.",
     "otari_tool_iteration_limit": "The task exhausted its web search budget.",
     "planning_timeout": "Scan planning timed out.",
     "run_cost_limit": "The task was cancelled after reaching a usage limit.",

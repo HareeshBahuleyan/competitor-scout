@@ -6,12 +6,12 @@ networking connects `web` to `api`, and both Python services connect to `postgre
 
 ## Service topology
 
-| Service | Railway root directory | Config | Exposure |
-| --- | --- | --- | --- |
-| `web` | `/apps/web` | `railway.toml` | Public custom domain |
-| `api` | `/apps/backend` | `railway.api.toml` | Private network only |
-| `worker` | `/apps/backend` | `railway.worker.toml` | Private network only |
-| `postgres` | Railway PostgreSQL template | Managed by Railway | Private network only |
+| Service    | Railway root directory      | Config                | Exposure             |
+| ---------- | --------------------------- | --------------------- | -------------------- |
+| `web`      | `/apps/web`                 | `railway.toml`        | Public custom domain |
+| `api`      | `/apps/backend`             | `railway.api.toml`    | Private network only |
+| `worker`   | `/apps/backend`             | `railway.worker.toml` | Private network only |
+| `postgres` | Railway PostgreSQL template | Managed by Railway    | Private network only |
 
 Set `WEB_INTERNAL_API_URL` on `web` to the API's Railway private URL, including
 the `http://` scheme and port. Make the variable available during the web image
@@ -29,10 +29,15 @@ Set these on both `api` and `worker` unless noted otherwise:
 - `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
 - `OTARI_BASE_URL=https://api.otari.ai`
 - `OTARI_AI_TOKEN` (the only supported Otari credential)
-- `OTARI_MAIN_MODEL` and `OTARI_CHILD_MODEL`
+- `OTARI_MAIN_MODEL=general-mzai-then-openai-models`
+- `OTARI_CHILD_MODEL=general-mzai-then-openai-models`
 - optional `OTARI_COST_LOOKUP_ATTEMPTS` and `OTARI_COST_LOOKUP_DELAY_SECONDS`, which bound
   the settled-cost lookup described in `docs/architecture/agent-runtime.md`
 - all documented task, deadline, concurrency, confidence, and cost-ceiling variables from `.env.example`
+
+The Otari workspace budget is configured in Otari rather than duplicated as a Railway variable. Otari enforces it for `OTARI_AI_TOKEN`; keep the application-level `MAX_RUN_COST_USD` and `MAX_USER_DAILY_COST_USD` ceilings configured as an additional guard.
+
+Named-policy rollout is gated on the hosted Otari cutover. The legacy hosted model catalog lists concrete models only and still resolves the workspace default regardless of the requested policy name. Before deploying this configuration, confirm that `general-mzai-then-openai-models` is selectable on the target Otari deployment; until then, it is effective only when the same policy is the legacy workspace default.
 
 Do not configure `E2E_AUTH_SECRET` in production.
 
@@ -71,6 +76,9 @@ Hosted Otari structured output, configured models, Tavily-backed web-search enti
 request IDs, pricing metadata, and the configured ceilings must be verified in a
 staging Railway project before production monitoring is enabled. This is a paid
 external test and requires explicit approval. Never use the dummy local token for it.
+The smoke test must also confirm that activity records name
+`general-mzai-then-openai-models` as the applied policy rather than silently using a
+legacy workspace default.
 
 ## Rollback and restore
 
