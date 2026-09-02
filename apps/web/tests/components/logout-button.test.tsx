@@ -47,6 +47,14 @@ describe("LogoutButton", () => {
     await waitFor(() => expect(navigationMocks.replace).toHaveBeenCalledWith("/login"));
   });
 
+  it("does not derive its initial disabled state from the current-user query", () => {
+    apiMocks.apiGetClient.mockReturnValue(new Promise(() => undefined));
+
+    renderWithQuery(<LogoutButton />);
+
+    expect(screen.getByRole("button", { name: "Log out" })).toBeEnabled();
+  });
+
   it("keeps an accessible name in compact mode", async () => {
     renderWithQuery(<LogoutButton compact />);
 
