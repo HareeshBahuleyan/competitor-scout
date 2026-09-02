@@ -20,6 +20,16 @@ const finding: Finding = {
 };
 
 describe("FindingCard", () => {
+  it("exposes one detail link and a visible affordance for the clickable card", () => {
+    render(<FindingCard finding={finding} />);
+
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAccessibleName(finding.title);
+    expect(links[0]).toHaveAttribute("href", `/findings/${finding.id}`);
+    expect(screen.getByText("View update")).toBeInTheDocument();
+  });
+
   it("uses the danger indicator for critical findings", () => {
     render(<FindingCard finding={finding} />);
 

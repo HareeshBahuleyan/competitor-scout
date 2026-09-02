@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
@@ -52,8 +53,10 @@ def test_weekly_period_uses_exact_local_midnight_boundaries_across_dst() -> None
     assert period.end_exclusive_utc == datetime(2026, 10, 25, 23, 0, tzinfo=UTC)
 
 
-async def test_weekly_scheduler_uses_monday_0800_local_once_per_period_and_skips_disabled(
+@pytest.mark.parametrize("qualifying_run_type", [RunType.DAILY_SCOUT, RunType.MANUAL_SCOUT])
+async def test_weekly_scheduler_requires_period_scout_activity_and_skips_disabled(
     brief_store,
+    qualifying_run_type: RunType,
 ) -> None:
     sessions = brief_store
     async with sessions.begin() as session:
@@ -69,10 +72,47 @@ async def test_weekly_scheduler_uses_monday_0800_local_once_per_period_and_skips
             timezone="Europe/Berlin",
             disabled_at=datetime(2026, 10, 20, 12, 0, tzinfo=UTC),
         )
-        session.add_all([eligible, disabled])
+        discovery_only = User(
+            email=f"weekly-discovery-{stem}@example.com",
+            display_name="Discovery-only Weekly Owner",
+            timezone="Europe/Berlin",
+        )
+        session.add_all([eligible, disabled, discovery_only])
         await session.flush()
+
+        eligible_competitor = Competitor(
+            user_id=eligible.id,
+            name="Eligible competitor",
+            primary_domain=f"eligible-{stem}.example",
+        )
+        discovery_competitor = Competitor(
+            user_id=discovery_only.id,
+            name="Discovery-only competitor",
+            primary_domain=f"discovery-{stem}.example",
+        )
+        session.add_all([eligible_competitor, discovery_competitor])
+        await session.flush()
+        session.add_all(
+            [
+                ScoutRun(
+                    user_id=eligible.id,
+                    competitor_id=eligible_competitor.id,
+                    run_type=qualifying_run_type,
+                    status=ScoutRunStatus.COMPLETED,
+                    scheduled_for=datetime(2026, 10, 20, 12, 0, tzinfo=UTC),
+                ),
+                ScoutRun(
+                    user_id=discovery_only.id,
+                    competitor_id=discovery_competitor.id,
+                    run_type=RunType.SOURCE_DISCOVERY,
+                    status=ScoutRunStatus.COMPLETED,
+                    scheduled_for=datetime(2026, 10, 20, 12, 0, tzinfo=UTC),
+                ),
+            ]
+        )
         eligible_id = eligible.id
         disabled_id = disabled.id
+        discovery_only_id = discovery_only.id
 
     before_due = datetime(2026, 10, 26, 6, 59, tzinfo=UTC)
     due = datetime(2026, 10, 26, 7, 0, tzinfo=UTC)
@@ -118,6 +158,12 @@ async def test_weekly_scheduler_uses_monday_0800_local_once_per_period_and_skips
                 ScoutRun.run_type == RunType.WEEKLY_BRIEF,
             )
         )
+        discovery_only_run_count = await session.scalar(
+            select(func.count(ScoutRun.id)).where(
+                ScoutRun.user_id == discovery_only_id,
+                ScoutRun.run_type == RunType.WEEKLY_BRIEF,
+            )
+        )
         jobs = list(
             (
                 await session.scalars(
@@ -131,6 +177,7 @@ async def test_weekly_scheduler_uses_monday_0800_local_once_per_period_and_skips
 
     assert len(eligible_runs) == 1
     assert disabled_run_count == 0
+    assert discovery_only_run_count == 0
     assert len(jobs) == 1
     assert jobs[0].job_type == "weekly_brief"
     assert jobs[0].payload == {"run_id": str(eligible_runs[0].id)}

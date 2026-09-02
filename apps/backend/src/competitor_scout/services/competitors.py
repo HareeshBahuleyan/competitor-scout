@@ -11,6 +11,7 @@ from datetime import UTC, datetime, time
 from urllib.parse import urlsplit
 
 from sqlalchemy import func, or_, select, text
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from competitor_scout.models.intelligence import (
@@ -18,6 +19,7 @@ from competitor_scout.models.intelligence import (
     Competitor,
     CompetitorStatus,
     MonitoredSource,
+    SourceCategory,
 )
 from competitor_scout.security.urls import UnsafeSourceUrl, same_registrable_domain
 
@@ -287,8 +289,6 @@ async def update_source_approval(
         source.url = normalized_url
         source.normalized_url = normalized_url
         source.approval_status = ApprovalStatus.APPROVED
-        if competitor.status is CompetitorStatus.DISCOVERING:
-            competitor.status = CompetitorStatus.ACTIVE
     else:
         source.approval_status = ApprovalStatus.REJECTED
         await db.flush()
@@ -303,3 +303,94 @@ async def update_source_approval(
     await db.flush()
     await db.refresh(source)
     return source
+
+
+def _manual_source_title(normalized_url: str) -> str:
+    parsed = urlsplit(normalized_url)
+    path_label = parsed.path.rstrip("/").rsplit("/", 1)[-1].replace("-", " ").replace("_", " ")
+    return (path_label.strip().title() or parsed.hostname or "Website")[:500]
+
+
+async def create_manual_source(
+    db: AsyncSession,
+    *,
+    competitor: Competitor,
+    url: str,
+    validator: SourceUrlValidator,
+) -> MonitoredSource:
+    try:
+        normalized_url = await validator(url)
+    except (UnsafeSourceUrl, OSError, TimeoutError, ValueError) as error:
+        raise SourceUrlNotAllowed("source URL is not allowed") from error
+    if not same_registrable_domain(normalized_url, competitor.primary_domain):
+        raise SourceUrlNotAllowed("source URL is outside the competitor domain")
+
+    statement = (
+        insert(MonitoredSource)
+        .values(
+            id=uuid.uuid4(),
+            competitor_id=competitor.id,
+            url=normalized_url,
+            normalized_url=normalized_url,
+            source_category=SourceCategory.OTHER,
+            title=_manual_source_title(normalized_url),
+            discovery_reason="Added manually during setup.",
+            approval_status=ApprovalStatus.SUGGESTED,
+        )
+        .on_conflict_do_nothing(
+            index_elements=[MonitoredSource.competitor_id, MonitoredSource.normalized_url]
+        )
+        .returning(MonitoredSource)
+    )
+    source = (await db.scalars(statement)).one_or_none()
+    if source is None:
+        source = await db.scalar(
+            select(MonitoredSource).where(
+                MonitoredSource.competitor_id == competitor.id,
+                MonitoredSource.normalized_url == normalized_url,
+            )
+        )
+    if source is None:
+        raise RuntimeError("idempotent manual source creation did not resolve a source")
+    return source
+
+
+async def select_monitoring_sources(
+    db: AsyncSession,
+    *,
+    competitor: Competitor,
+    source_ids: list[uuid.UUID],
+    validator: SourceUrlValidator,
+) -> None:
+    selected_ids = set(source_ids)
+    await db.execute(select(Competitor.id).where(Competitor.id == competitor.id).with_for_update())
+    sources = list(
+        (
+            await db.scalars(
+                select(MonitoredSource)
+                .where(MonitoredSource.competitor_id == competitor.id)
+                .with_for_update()
+            )
+        ).all()
+    )
+    owned_ids = {source.id for source in sources}
+    if not selected_ids or not selected_ids.issubset(owned_ids):
+        raise CompetitorActivationNotAllowed("at least one owned source is required")
+
+    for source in sources:
+        if source.id not in selected_ids:
+            if source.approval_status is ApprovalStatus.SUGGESTED:
+                source.approval_status = ApprovalStatus.REJECTED
+            continue
+        try:
+            normalized_url = await validator(source.url)
+        except (UnsafeSourceUrl, OSError, TimeoutError, ValueError) as error:
+            raise SourceUrlNotAllowed("source URL is not allowed") from error
+        if not same_registrable_domain(normalized_url, competitor.primary_domain):
+            raise SourceUrlNotAllowed("source URL is outside the competitor domain")
+        source.url = normalized_url
+        source.normalized_url = normalized_url
+        source.approval_status = ApprovalStatus.APPROVED
+
+    competitor.status = CompetitorStatus.ACTIVE
+    await db.flush()

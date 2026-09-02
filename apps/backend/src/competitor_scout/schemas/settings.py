@@ -56,7 +56,6 @@ class UsageSummaryRow(BaseModel):
     model: str
     input_tokens: int
     output_tokens: int
-    tool_calls: int | None
     settled_cost_usd: Decimal | None
 
 

@@ -8,7 +8,12 @@ import pytest
 from pydantic import ValidationError
 
 from competitor_scout.agents.contracts import ScoutPlan
-from competitor_scout.agents.orchestrator import PlanValidationError, validate_scout_plan
+from competitor_scout.agents.orchestrator import (
+    MAX_OTARI_TOOL_ITERATIONS,
+    PlanValidationError,
+    tool_iteration_budget,
+    validate_scout_plan,
+)
 from competitor_scout.jobs.executor import JobExecutor
 from competitor_scout.jobs.scheduler import (
     daily_deduplication_key,
@@ -95,6 +100,15 @@ def test_plan_cannot_exceed_deployment_search_limit() -> None:
         )
 
     assert raised.value.code == "invalid_plan_limits"
+
+
+def test_tool_iteration_budget_leaves_headroom_above_the_search_budget() -> None:
+    assert tool_iteration_budget(1) > 2
+    assert tool_iteration_budget(4) > 5
+
+
+def test_tool_iteration_budget_stays_within_the_gateway_ceiling() -> None:
+    assert tool_iteration_budget(24) == MAX_OTARI_TOOL_ITERATIONS
 
 
 def test_schedule_keys_are_stable() -> None:

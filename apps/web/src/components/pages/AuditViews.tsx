@@ -79,9 +79,9 @@ export function FindingsListView({ initialFilters }: { initialFilters: FindingFi
     <section className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="eyebrow">Signal archive</p>
-          <h1 className="mt-1 text-4xl font-semibold">Findings</h1>
-          <p className="mt-2 text-slate-600">Evidence-backed competitive changes.</p>
+          <p className="eyebrow">Competitor activity</p>
+          <h1 className="mt-1 text-4xl font-semibold">Updates</h1>
+          <p className="mt-2 text-slate-600">Every change we spotted, with the source.</p>
         </div>
         <Button
           aria-expanded={filtersOpen}
@@ -121,7 +121,7 @@ export function FindingsListView({ initialFilters }: { initialFilters: FindingFi
           <label className="text-sm font-medium">
             Category
             <select
-              className="mt-1 block min-h-10 w-full rounded-xl border px-3 py-2"
+              className="select-control mt-1"
               defaultValue={initialFilters.category ?? ""}
               name="category"
             >
@@ -135,7 +135,7 @@ export function FindingsListView({ initialFilters }: { initialFilters: FindingFi
           <label className="text-sm font-medium">
             Significance
             <select
-              className="mt-1 block min-h-10 w-full rounded-xl border px-3 py-2"
+              className="select-control mt-1"
               defaultValue={initialFilters.significance ?? ""}
               name="significance"
             >
@@ -272,9 +272,12 @@ export function RunsListView() {
   return (
     <section className="space-y-6">
       <div>
-        <p className="eyebrow">Operations</p>
-        <h1 className="mt-1 text-4xl font-semibold">Runs</h1>
-        <p className="mt-2 text-slate-600">Scout execution history and audit status.</p>
+        <p className="eyebrow">Advanced</p>
+        <h1 className="mt-1 text-4xl font-semibold">Scan activity</h1>
+        <p className="mt-2 text-slate-600">
+          Execution history, task detail, and audit status for every scan. Useful for
+          troubleshooting when an update looks missing or a scan reports a problem.
+        </p>
       </div>
       {query.isPending ? <LoadingState label="Loading runs…" rows={4} /> : null}
       {query.isError ? (
@@ -283,7 +286,7 @@ export function RunsListView() {
         </p>
       ) : null}
       {query.data?.items.length === 0 ? (
-        <p className="empty-state p-8 text-center">No runs yet.</p>
+        <p className="empty-state p-8 text-center">No scans yet.</p>
       ) : null}
       {query.data?.items.length ? (
         <ul className="space-y-3">
@@ -291,7 +294,7 @@ export function RunsListView() {
             <li className="surface surface-interactive p-5" key={run.id}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <Link className="font-semibold capitalize hover:underline" href={`/runs/${run.id}`}>
-                  {runLabel(run.run_type)} run
+                  {runLabel(run.run_type)} scan
                 </Link>
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-sm capitalize">
                   {run.status}
@@ -353,6 +356,7 @@ export function RunDetailView({ runId }: { runId: string }) {
       <RunTimeline
         failure_reason={run.data.failure_summary}
         partial_reasons={run.data.partial_reasons}
+        partial_summaries={run.data.partial_summaries}
         retry_count={retries}
         status={run.data.status}
         steps={lifecycle(run.data)}

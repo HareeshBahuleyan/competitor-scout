@@ -1,6 +1,6 @@
 import asyncio
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation
 from types import TracebackType
 from typing import Any, Self, TypeVar
@@ -11,6 +11,13 @@ from pydantic import BaseModel, ValidationError
 from competitor_scout.config import Settings
 
 T = TypeVar("T", bound=BaseModel)
+
+COST_LOOKUP_TIMEOUT_SECONDS = 3.0
+"""Per-attempt budget for one settled-cost lookup.
+
+Kept well inside the run's planning, child, and synthesis deadlines: an
+unavailable settlement must not consume the deadline of the work it prices.
+"""
 
 
 def hosted_json_schema(output_type: type[BaseModel]) -> dict[str, Any]:
@@ -79,6 +86,8 @@ class OtariClient:
             timeout=httpx.Timeout(60.0),
             transport=transport,
         )
+        self._cost_lookup_attempts = settings.otari_cost_lookup_attempts
+        self._cost_lookup_delay_seconds = settings.otari_cost_lookup_delay_seconds
 
     @property
     def is_closed(self) -> bool:
@@ -177,10 +186,62 @@ class OtariClient:
             )
             raise OtariError(code, retryable=False) from None
 
-        return result, OtariMetadata(
-            request_id=response.headers.get("X-Otari-Request-ID"),
-            usage=self._usage(document),
-        )
+        request_id = response.headers.get("X-Otari-Request-ID")
+        usage = self._usage(document)
+        if usage.cost_usd is None and request_id:
+            usage = await self._settled_usage(usage, request_id)
+
+        return result, OtariMetadata(request_id=request_id, usage=usage)
+
+    async def _settled_usage(self, usage: OtariUsage, request_id: str) -> OtariUsage:
+        """Fill in the settled cost that the response did not carry inline.
+
+        Otari attaches ``cost_usd`` to the completion only when the platform
+        settles within the gateway's inline budget; otherwise the authoritative
+        amount is served by ``/api/v1/request-costs/{request_id}``, which answers
+        ``202`` while an attempt is still pending. A lookup that fails or stays
+        pending leaves the cost unknown rather than recording a misleading zero.
+        """
+        settlement = await self._request_cost(request_id)
+        if settlement is None:
+            return usage
+        cost_usd, pricing_source = settlement
+        return replace(usage, cost_usd=cost_usd, pricing_source=pricing_source)
+
+    async def _request_cost(self, request_id: str) -> tuple[Decimal, str] | None:
+        for attempt in range(1, self._cost_lookup_attempts + 1):
+            try:
+                response = await self._client.get(
+                    f"/api/v1/request-costs/{request_id}",
+                    timeout=httpx.Timeout(COST_LOOKUP_TIMEOUT_SECONDS),
+                )
+            except httpx.HTTPError:
+                return None
+            if response.status_code == 200:
+                return self._settlement(response)
+            if response.status_code != 202:
+                return None
+            if attempt == self._cost_lookup_attempts:
+                return None
+            await asyncio.sleep(self._cost_lookup_delay_seconds)
+        return None
+
+    @classmethod
+    def _settlement(cls, response: httpx.Response) -> tuple[Decimal, str] | None:
+        try:
+            document = json.loads(response.content, parse_float=Decimal)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return None
+        if not isinstance(document, dict) or document.get("usage_status") != "reported":
+            return None
+        pricing = document.get("pricing")
+        pricing_source = pricing.get("source") if isinstance(pricing, dict) else None
+        cost = cls._cost(document.get("cost_usd"))
+        # An unpriced settlement reports a placeholder amount, so a missing
+        # pricing source has to stay unknown instead of reading as a free call.
+        if cost is None or not isinstance(pricing_source, str):
+            return None
+        return cost, pricing_source
 
     @staticmethod
     def _validate_request_bounds(

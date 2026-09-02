@@ -147,6 +147,29 @@ async def schedule_due_weekly_briefs(
         if scheduled_for > current:
             continue
 
+        period_start = datetime.combine(
+            local_schedule_date - timedelta(days=7),
+            time.min,
+            tzinfo=zone,
+        ).astimezone(UTC)
+        period_end_exclusive = datetime.combine(
+            local_schedule_date,
+            time.min,
+            tzinfo=zone,
+        ).astimezone(UTC)
+        scout_activity = await session.scalar(
+            select(ScoutRun.id)
+            .where(
+                ScoutRun.user_id == user.id,
+                ScoutRun.run_type.in_([RunType.DAILY_SCOUT, RunType.MANUAL_SCOUT]),
+                ScoutRun.scheduled_for >= period_start,
+                ScoutRun.scheduled_for < period_end_exclusive,
+            )
+            .limit(1)
+        )
+        if scout_activity is None:
+            continue
+
         statement = (
             insert(ScoutRun)
             .values(

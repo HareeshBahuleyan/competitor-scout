@@ -33,17 +33,19 @@ export function BriefsListView() {
     <section className="space-y-6">
       <header>
         <p className="eyebrow">Executive intelligence</p>
-        <h1 className="mt-1 text-4xl font-semibold">Weekly briefs</h1>
-        <p className="mt-2 text-slate-600">Validated summaries grounded in accepted findings.</p>
+        <h1 className="mt-1 text-4xl font-semibold">Weekly Digest</h1>
+        <p className="mt-2 text-slate-600">
+          Your week in one page, backed by the updates behind it.
+        </p>
       </header>
-      {query.isPending ? <LoadingState label="Loading weekly briefs…" rows={4} /> : null}
+      {query.isPending ? <LoadingState label="Loading Weekly Digests…" rows={4} /> : null}
       {query.isError ? (
         <p className="text-red-700" role="alert">
           {errorText(query.error)}
         </p>
       ) : null}
       {query.data?.items.length === 0 ? (
-        <p className="empty-state p-8 text-center">No weekly briefs yet.</p>
+        <p className="empty-state p-8 text-center">No Weekly Digest yet.</p>
       ) : null}
       {query.data?.items.length ? (
         <ul className="space-y-4">
@@ -71,7 +73,7 @@ export function BriefDetailView({ briefId }: { briefId: string }) {
     queryKey: ["brief", briefId],
     queryFn: () => apiGetClient(`/api/v1/briefs/${briefId}`, weeklyBriefSchema),
   });
-  if (query.isPending) return <LoadingState label="Loading weekly brief…" rows={4} />;
+  if (query.isPending) return <LoadingState label="Loading the Weekly Digest…" rows={4} />;
   if (query.isError)
     return (
       <p className="text-red-700" role="alert">
@@ -116,7 +118,7 @@ export function BriefDetailView({ briefId }: { briefId: string }) {
                     className="mt-1 inline-block font-medium text-blue-700 hover:underline"
                     href={`/findings/${reference.finding_id}`}
                   >
-                    View finding and evidence
+                    View the update and its evidence
                   </Link>
                 </li>
               ))}
@@ -132,7 +134,7 @@ export function BriefDetailView({ briefId }: { briefId: string }) {
         className="text-sm font-medium text-blue-700 hover:underline"
         href={`/runs/${brief.scout_run_id}`}
       >
-        View brief generation run
+        View the scan that produced this digest
       </Link>
     </article>
   );

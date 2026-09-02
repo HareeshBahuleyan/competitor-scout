@@ -19,7 +19,6 @@ describe("RunTimeline", () => {
         usage={{
           input_tokens: 120,
           output_tokens: 45,
-          tool_calls: 2,
           latency_ms: 1530,
           settled_cost_usd: "0.42",
         }}
@@ -40,9 +39,23 @@ describe("RunTimeline", () => {
     expect(screen.getByText("Retries")).toHaveTextContent("1");
     expect(screen.getByText("Input tokens")).toHaveTextContent("120");
     expect(screen.getByText("Output tokens")).toHaveTextContent("45");
-    expect(screen.getByText("Tool calls")).toHaveTextContent("2");
     expect(screen.getByText("Latency")).toHaveTextContent("1,530 ms");
     expect(screen.getByText("Settled cost")).toHaveTextContent("$0.42");
+  });
+
+  it("prefers the backend summary over the raw partial reason code", () => {
+    render(
+      <RunTimeline
+        partial_reasons={["child_task_failed"]}
+        partial_summaries={["Some research tasks could not complete."]}
+        retry_count={0}
+        status="partial"
+        steps={outOfOrderSteps}
+      />,
+    );
+
+    expect(screen.getByText("Some research tasks could not complete.")).toBeVisible();
+    expect(screen.queryByText("Child task failed")).not.toBeInTheDocument();
   });
 
   it("shows a failed reason and unknown usage without inventing totals", () => {
@@ -59,7 +72,6 @@ describe("RunTimeline", () => {
     expect(screen.getByText("Otari authentication error")).toBeVisible();
     expect(screen.getByText("Input tokens")).toHaveTextContent("Unknown");
     expect(screen.getByText("Output tokens")).toHaveTextContent("Unknown");
-    expect(screen.getByText("Tool calls")).toHaveTextContent("Unknown");
     expect(screen.getByText("Latency")).toHaveTextContent("Unknown");
     expect(screen.getByText("Settled cost")).toHaveTextContent("Unknown");
   });

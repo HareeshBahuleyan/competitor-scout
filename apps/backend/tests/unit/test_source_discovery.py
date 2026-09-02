@@ -202,12 +202,21 @@ async def test_discovery_uses_exact_hosted_tool_contract_and_filters_sources() -
     run_id = uuid.uuid4()
 
     async def transport_handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/request-costs/req-discovery-synthetic":
+            return httpx.Response(
+                200,
+                json={
+                    "cost_usd": "0.002500",
+                    "usage_status": "reported",
+                    "pricing": {"source": "genai_prices"},
+                },
+            )
         body = json.loads((await request.aread()).decode())
         assert body["model"] == "competitor-scout-main"
         assert body["tools"] == [{"type": "otari_web_search"}]
         assert body["parallel_tool_calls"] is False
-        assert body["max_tool_iterations"] == 6
-        assert "Make no more than 5 web search calls." in body["messages"][0]["content"]
+        assert body["max_tool_iterations"] == 11
+        assert "Make no more than 8 web search calls." in body["messages"][0]["content"]
         assert body["session_label"] == f"scout-run:{run_id}"
         return httpx.Response(
             200,
@@ -233,6 +242,8 @@ async def test_discovery_uses_exact_hosted_tool_contract_and_filters_sources() -
     assert outcome.rejected_count == 3
     assert len(validator.calls) == 4
     assert outcome.metadata.request_id == "req-discovery-synthetic"
+    assert outcome.metadata.usage.cost_usd == Decimal("0.002500")
+    assert outcome.metadata.usage.pricing_source == "genai_prices"
 
 
 async def test_handler_commits_claim_before_external_call_and_concurrent_call_is_noop(

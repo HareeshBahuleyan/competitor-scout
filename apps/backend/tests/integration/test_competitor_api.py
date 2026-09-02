@@ -145,6 +145,20 @@ async def test_competitor_crud_and_cursor_list_envelope(db_session) -> None:
     assert missing.status_code == 404
 
 
+async def test_competitor_create_uses_account_default_daily_time_when_omitted(db_session) -> None:
+    user = await add_user(db_session, "default-time-owner")
+    user.default_daily_run_time_local = time(6, 45)
+
+    async with await make_client(db_session, user, FakeSourceValidator()) as client:
+        response = await client.post(
+            "/api/v1/competitors",
+            json={"name": "Acme", "primary_domain": "default-time.example"},
+        )
+
+    assert response.status_code == 201
+    assert response.json()["daily_run_time_local"] == "06:45:00"
+
+
 @pytest.mark.parametrize("field", ["name", "description", "daily_run_time_local"])
 async def test_competitor_update_rejects_null_fields(db_session, field: str) -> None:
     user = await add_user(db_session, f"null-update-{field}")
@@ -364,7 +378,7 @@ async def test_cross_user_record_routes_all_return_404(db_session) -> None:
     assert all(response.json()["detail"] == "competitor not found" for response in responses)
 
 
-async def test_source_list_is_cursor_paginated_and_first_approval_activates(db_session) -> None:
+async def test_source_list_is_cursor_paginated_and_approval_does_not_activate(db_session) -> None:
     user = await add_user(db_session, "source-owner")
     competitor = Competitor(
         user_id=user.id,
@@ -407,7 +421,7 @@ async def test_source_list_is_cursor_paginated_and_first_approval_activates(db_s
     assert approved.json()["approval_status"] == "approved"
     assert validator.calls == [original_url]
     await db_session.refresh(competitor)
-    assert competitor.status is CompetitorStatus.ACTIVE
+    assert competitor.status is CompetitorStatus.DISCOVERING
 
 
 async def test_rejecting_every_source_leaves_competitor_discovering(db_session) -> None:
@@ -437,7 +451,8 @@ async def test_rejecting_every_source_leaves_competitor_discovering(db_session) 
             json={"approval_status": "approved"},
         )
         assert approved.status_code == 200
-        assert competitor.status is CompetitorStatus.ACTIVE
+        competitor.status = CompetitorStatus.ACTIVE
+        await db_session.flush()
         responses = [
             await client.patch(
                 f"/api/v1/competitors/{competitor.id}/sources/{source.id}",
@@ -489,6 +504,123 @@ async def test_source_approval_revalidates_url_and_domain(db_session, failure: s
     )
     assert source_status is ApprovalStatus.SUGGESTED
     assert competitor_status is CompetitorStatus.DISCOVERING
+
+
+async def test_manual_first_party_source_is_validated_scoped_and_idempotent(db_session) -> None:
+    user = await add_user(db_session, "manual-source-owner")
+    competitor = Competitor(user_id=user.id, name="Acme", primary_domain="acme.com")
+    db_session.add(competitor)
+    await db_session.flush()
+    validator = FakeSourceValidator()
+    supplied_url = "https://www.acme.com/pricing?utm_source=setup"
+    validator.results[supplied_url] = "https://www.acme.com/pricing"
+
+    async with await make_client(db_session, user, validator) as client:
+        first = await client.post(
+            f"/api/v1/competitors/{competitor.id}/sources",
+            json={"url": supplied_url},
+        )
+        second = await client.post(
+            f"/api/v1/competitors/{competitor.id}/sources",
+            json={"url": supplied_url},
+        )
+
+    assert first.status_code == second.status_code == 201
+    assert first.json()["id"] == second.json()["id"]
+    assert first.json()["url"] == "https://www.acme.com/pricing"
+    assert first.json()["approval_status"] == "suggested"
+    assert validator.calls == [supplied_url, supplied_url]
+    sources = list(
+        (
+            await db_session.scalars(
+                select(MonitoredSource).where(MonitoredSource.competitor_id == competitor.id)
+            )
+        ).all()
+    )
+    assert len(sources) == 1
+
+
+async def test_manual_first_party_source_rejects_out_of_scope_url(db_session) -> None:
+    user = await add_user(db_session, "outside-source-owner")
+    competitor = Competitor(user_id=user.id, name="Acme", primary_domain="acme.com")
+    db_session.add(competitor)
+    await db_session.flush()
+
+    async with await make_client(db_session, user, FakeSourceValidator()) as client:
+        response = await client.post(
+            f"/api/v1/competitors/{competitor.id}/sources",
+            json={"url": "https://evil.example/pricing"},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "source URL is not allowed"
+
+
+async def test_start_monitoring_approves_selection_rejects_rest_and_queues_first_scan(
+    db_session,
+    monkeypatch,
+) -> None:
+    from competitor_scout.api import competitors as competitors_api
+
+    now = datetime(2026, 8, 21, 12, 3, 47, tzinfo=UTC)
+    monkeypatch.setattr(competitors_api, "utc_now", lambda: now)
+    user = await add_user(db_session, "start-monitoring-owner")
+    competitor = Competitor(user_id=user.id, name="Acme", primary_domain="acme.example")
+    selected = MonitoredSource(
+        competitor=competitor,
+        url="https://acme.example/pricing",
+        normalized_url="https://acme.example/pricing",
+        source_category=SourceCategory.PRICING,
+        title="Pricing",
+        discovery_reason="Pricing signal",
+    )
+    skipped = MonitoredSource(
+        competitor=competitor,
+        url="https://acme.example/blog",
+        normalized_url="https://acme.example/blog",
+        source_category=SourceCategory.BLOG,
+        title="Blog",
+        discovery_reason="Company news",
+    )
+    db_session.add_all([selected, skipped])
+    await db_session.flush()
+
+    async with await make_client(db_session, user, FakeSourceValidator()) as client:
+        first = await client.post(
+            f"/api/v1/competitors/{competitor.id}/start-monitoring",
+            json={"source_ids": [str(selected.id)], "run_initial_scan": True},
+        )
+        second = await client.post(
+            f"/api/v1/competitors/{competitor.id}/start-monitoring",
+            json={"source_ids": [str(selected.id)], "run_initial_scan": True},
+        )
+
+    assert first.status_code == second.status_code == 202
+    assert first.json()["competitor"]["status"] == "active"
+    assert first.json()["run"]["status"] == "queued"
+    assert first.json()["run"]["run_type"] == "manual_scout"
+    assert first.json()["run"]["id"] == second.json()["run"]["id"]
+    await db_session.refresh(selected)
+    await db_session.refresh(skipped)
+    assert selected.approval_status is ApprovalStatus.APPROVED
+    assert skipped.approval_status is ApprovalStatus.REJECTED
+    jobs = list((await db_session.scalars(select(Job).where(Job.job_type == "manual_scout"))).all())
+    assert len(jobs) == 1
+
+
+async def test_start_monitoring_requires_at_least_one_owned_source(db_session) -> None:
+    user = await add_user(db_session, "start-monitoring-empty")
+    competitor = Competitor(user_id=user.id, name="Acme", primary_domain="empty.example")
+    db_session.add(competitor)
+    await db_session.flush()
+
+    async with await make_client(db_session, user, FakeSourceValidator()) as client:
+        response = await client.post(
+            f"/api/v1/competitors/{competitor.id}/start-monitoring",
+            json={"source_ids": [], "run_initial_scan": True},
+        )
+
+    assert response.status_code == 422
 
 
 async def test_capacity_check_is_safe_under_concurrent_creates(
