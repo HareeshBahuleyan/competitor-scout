@@ -44,11 +44,11 @@ describe("StartingSnapshot", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Positioning" })).toBeInTheDocument();
     expect(screen.getByText("Source coverage complete")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Acme homepage/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Acme homepage" })).toHaveAttribute(
       "rel",
       "noopener noreferrer",
     );
-    expect(screen.getByRole("link", { name: /Acme homepage/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Acme homepage" })).toHaveAttribute(
       "href",
       "https://acme.example/",
     );

@@ -91,7 +91,7 @@ export function StartingSnapshot({
                           rel="noopener noreferrer"
                           target="_blank"
                         >
-                          {reference.source_title} (opens in a new tab)
+                          {reference.source_title}
                         </a>
                       </li>
                     ))}
