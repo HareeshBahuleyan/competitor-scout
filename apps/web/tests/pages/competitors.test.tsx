@@ -185,6 +185,9 @@ describe("competitor pages", () => {
     const progress = await screen.findByTestId("working-indicator");
     expect(progress).toHaveTextContent("Finding first-party sources…");
     expect(progress).toHaveTextContent("This usually takes under a minute");
+    expect(
+      screen.queryByRole("button", { name: "Start monitoring & run first scan" }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps the standard header when adding a later competitor", async () => {
@@ -238,9 +241,15 @@ describe("competitor pages", () => {
     expect(
       await screen.findByRole("heading", { name: "Choose trusted sources" }),
     ).toBeInTheDocument();
-    expect(await screen.findByText("Pricing")).toBeInTheDocument();
+    const sourceTitle = await screen.findByText("Pricing");
+    const startMonitoringButton = screen.getByRole("button", {
+      name: "Start monitoring & run first scan",
+    });
+    expect(
+      startMonitoringButton.compareDocumentPosition(sourceTitle) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(screen.getByRole("checkbox", { name: "Monitor Pricing" })).toBeChecked();
-    fireEvent.click(screen.getByRole("button", { name: "Start monitoring & run first scan" }));
+    fireEvent.click(startMonitoringButton);
     expect(apiMutate).toHaveBeenNthCalledWith(
       1,
       "/api/v1/competitors",
