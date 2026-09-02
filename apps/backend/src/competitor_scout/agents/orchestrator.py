@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from competitor_scout.agents.client import OtariClient, OtariError, OtariMetadata
 from competitor_scout.agents.contracts import (
     ChildTaskKind,
+    ChildTaskPayload,
     ChildTaskResult,
     DiscoveredSource,
     FindingCategory,
@@ -33,10 +34,15 @@ from competitor_scout.agents.prompts import (
     child_messages,
     initial_synthesis_messages,
     planning_messages,
+    schema_repair_messages,
     synthesis_messages,
 )
 from competitor_scout.agents.session_labels import scout_run_session_label
-from competitor_scout.agents.validation import NormalizedEvidence, validate_evidence_scope
+from competitor_scout.agents.validation import (
+    NormalizedEvidence,
+    normalize_child_payload,
+    validate_evidence_scope,
+)
 from competitor_scout.config import Settings
 from competitor_scout.db import SessionFactory
 from competitor_scout.models.intelligence import (
@@ -627,7 +633,7 @@ class ScoutOrchestrator:
                     messages=messages,
                     output_type=ScoutPlan,
                     session_label=scout_run_session_label(context.run_id),
-                    max_completion_tokens=self._settings.main_output_token_limit,
+                    max_completion_tokens=self._settings.planning_output_token_limit,
                     deadline_seconds=self._settings.planning_deadline_seconds,
                     enable_web_search=False,
                 )
@@ -651,13 +657,29 @@ class ScoutOrchestrator:
                 await self._fail_run(context.run_id, error.code, usage)
                 return None
             except Exception as error:
-                unsettled_attempt = True
-                usage.mark_unsettled()
+                if metadata is None:
+                    metadata = self._error_metadata(error)
+                    if metadata is None:
+                        unsettled_attempt = True
+                        usage.mark_unsettled()
+                    else:
+                        usage.add(metadata)
                 code = self._safe_error_code(error, "planning_failed")
                 repairable = code in {"otari_schema_error", "otari_invalid_response"}
                 if repairable and attempt <= self._settings.max_planning_repairs:
+                    messages = schema_repair_messages(
+                        planning_messages(payload),
+                        self._repair_issues(error, code),
+                    )
                     continue
-                await self._fail_task(context.planner_task_id, code)
+                await self._fail_task(
+                    context.planner_task_id,
+                    code,
+                    context=context,
+                    metadata=metadata,
+                    unsettled=unsettled_attempt,
+                    error_summary=self._error_summary(error),
+                )
                 await self._fail_run(context.run_id, code, usage)
                 return None
             if plan is None or metadata is None:
@@ -754,6 +776,7 @@ class ScoutOrchestrator:
         retained_accepted: list[NormalizedEvidence] = []
         retained_rejected_reasons: list[str] = []
         retained_metadata: OtariMetadata | None = None
+        repair_issues: tuple[str, ...] = ()
         async with self._child_semaphore:
             for attempt in range(1, total_attempts + 1):
                 metadata: OtariMetadata | None = None
@@ -776,13 +799,14 @@ class ScoutOrchestrator:
                             "recent_duplicate_hints": list(context.recent_findings),
                         },
                         tool_name=tool_name,
+                        repair_issues=repair_issues,
                     )
                     if self._estimated_tokens(messages) > self._settings.child_input_token_limit:
                         raise PlanValidationError("child_input_token_limit")
-                    result, metadata = await self._client.structured_completion(
+                    payload, metadata = await self._client.structured_completion(
                         model=self._settings.otari_child_model,
                         messages=messages,
-                        output_type=ChildTaskResult,
+                        output_type=ChildTaskPayload,
                         session_label=scout_run_session_label(context.run_id),
                         max_completion_tokens=self._settings.child_output_token_limit,
                         deadline_seconds=self._settings.child_deadline_seconds,
@@ -791,6 +815,7 @@ class ScoutOrchestrator:
                         max_tool_iterations=tool_iteration_budget(planned.max_search_calls),
                     )
                     metadata_records.append(metadata)
+                    result, payload_rejections = normalize_child_payload(payload)
                     if (
                         metadata.usage.tool_calls is not None
                         and metadata.usage.tool_calls > planned.max_search_calls
@@ -811,12 +836,18 @@ class ScoutOrchestrator:
                         raise PlanValidationError("child_input_token_limit")
                 except Exception as error:
                     if metadata is None:
-                        unsettled = True
+                        metadata = self._error_metadata(error)
+                        if metadata is None:
+                            unsettled = True
+                        else:
+                            metadata_records.append(metadata)
                     code = self._safe_error_code(error, "child_task_failed")
                     retryable = bool(getattr(error, "retryable", False)) or code in {
                         "otari_schema_error",
                         "otari_invalid_response",
                     }
+                    if retryable:
+                        repair_issues = self._repair_issues(error, code)
                     if retryable and not firecrawl_fallback_used and attempt < primary_attempts:
                         delay = self._retry_delay(error, attempt)
                         if delay < deadline - asyncio.get_running_loop().time():
@@ -848,6 +879,7 @@ class ScoutOrchestrator:
                             context=context,
                             metadata=metadata,
                             unsettled=unsettled,
+                            error_summary=self._error_summary(error),
                         )
                         return _ChildOutcome(
                             metadata=tuple(metadata_records),
@@ -856,7 +888,10 @@ class ScoutOrchestrator:
                             budget_stop_code=(code if code == "otari_budget_exceeded" else None),
                         )
                 else:
-                    rejected_reasons = [item.reason for item in rejected]
+                    rejected_reasons = [
+                        *payload_rejections,
+                        *(item.reason for item in rejected),
+                    ]
                     if (
                         firecrawl_server_ids
                         and not firecrawl_fallback_used
@@ -1143,7 +1178,11 @@ class ScoutOrchestrator:
                         else SynthesisResult
                     ),
                     session_label=scout_run_session_label(context.run_id),
-                    max_completion_tokens=self._settings.main_output_token_limit,
+                    max_completion_tokens=(
+                        self._settings.initial_synthesis_output_token_limit
+                        if context.initial_snapshot_required
+                        else self._settings.main_output_token_limit
+                    ),
                     deadline_seconds=self._settings.synthesis_deadline_seconds,
                     enable_web_search=False,
                 )
@@ -1152,11 +1191,30 @@ class ScoutOrchestrator:
                     raise PlanValidationError("main_input_token_limit")
             except Exception as error:
                 if metadata is None:
-                    unsettled_attempt = True
-                    usage.mark_unsettled()
+                    metadata = self._error_metadata(error)
+                    if metadata is None:
+                        unsettled_attempt = True
+                        usage.mark_unsettled()
+                    else:
+                        usage.add(metadata)
                 code = self._safe_error_code(error, "synthesis_failed")
                 repairable = code in {"otari_schema_error", "otari_invalid_response"}
                 if repairable and attempt <= self._settings.max_synthesis_repairs:
+                    messages = schema_repair_messages(
+                        message_factory(
+                            {
+                                "competitor": {
+                                    "name": context.competitor_name,
+                                    "primary_domain": context.competitor_domain,
+                                },
+                                "validated_evidence": evidence_payload,
+                                "recent_finding_fingerprints": [
+                                    item["claim_fingerprint"] for item in context.recent_findings
+                                ],
+                            }
+                        ),
+                        self._repair_issues(error, code),
+                    )
                     continue
                 await self._fail_task(
                     task_id,
@@ -1164,6 +1222,7 @@ class ScoutOrchestrator:
                     context=context,
                     metadata=metadata,
                     unsettled=unsettled_attempt,
+                    error_summary=self._error_summary(error),
                 )
                 await self._fail_run(context.run_id, code, usage)
                 return None
@@ -1356,6 +1415,7 @@ class ScoutOrchestrator:
         context: _RunContext | None = None,
         metadata: OtariMetadata | None = None,
         unsettled: bool = False,
+        error_summary: str = "agent task failed",
     ) -> None:
         async with self._sessions.begin() as session:
             task = await session.get(AgentTask, task_id)
@@ -1364,7 +1424,7 @@ class ScoutOrchestrator:
             task.status = AgentTaskStatus.FAILED
             task.completed_at = self._current_time()
             task.error_code = code
-            task.error_summary = "agent task failed"
+            task.error_summary = error_summary
             if metadata is not None:
                 task.otari_request_id = metadata.request_id
                 task.input_tokens = metadata.usage.input_tokens
@@ -1510,6 +1570,31 @@ class ScoutOrchestrator:
     def _safe_error_code(error: Exception, fallback: str) -> str:
         code = getattr(error, "code", None)
         return code if isinstance(code, str) and len(code) <= 100 else fallback
+
+    @staticmethod
+    def _error_metadata(error: Exception) -> OtariMetadata | None:
+        return error.metadata if isinstance(error, OtariError) else None
+
+    @staticmethod
+    def _repair_issues(error: Exception, code: str) -> tuple[str, ...]:
+        if isinstance(error, OtariError) and error.validation_issues:
+            return error.validation_issues
+        return ("$:json_invalid",) if code == "otari_invalid_response" else ("$:schema_mismatch",)
+
+    @staticmethod
+    def _error_summary(error: Exception) -> str:
+        if not isinstance(error, OtariError) or not error.validation_issues:
+            return "agent task failed"
+        known_finish_reasons = {"stop", "length", "tool_calls", "content_filter"}
+        finish_reason = (
+            error.metadata.finish_reason
+            if error.metadata is not None and error.metadata.finish_reason in known_finish_reasons
+            else None
+        )
+        finish_note = f" after finish_reason={finish_reason}" if finish_reason else ""
+        return f"agent task output failed validation{finish_note} at " + ", ".join(
+            error.validation_issues[:5]
+        )
 
     @staticmethod
     def _estimated_tokens(messages: Sequence[dict[str, str]]) -> int:

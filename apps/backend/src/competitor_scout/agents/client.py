@@ -54,6 +54,7 @@ class OtariUsage:
 class OtariMetadata:
     request_id: str | None
     usage: OtariUsage
+    finish_reason: str | None = None
 
 
 class OtariError(RuntimeError):
@@ -64,12 +65,16 @@ class OtariError(RuntimeError):
         retryable: bool,
         status_code: int | None = None,
         retry_after: str | None = None,
+        metadata: OtariMetadata | None = None,
+        validation_issues: tuple[str, ...] = (),
     ) -> None:
         super().__init__(f"Otari request failed ({code})")
         self.code = code
         self.retryable = retryable
         self.status_code = status_code
         self.retry_after = retry_after
+        self.metadata = metadata
+        self.validation_issues = validation_issues
 
 
 class OtariClient:
@@ -189,7 +194,20 @@ class OtariClient:
             raise self._http_error(response) from None
 
         document = self._response_document(response)
-        content = self._structured_content(document)
+        request_id = response.headers.get("X-Otari-Request-ID")
+        usage = self._usage(document)
+        if usage.cost_usd is None and request_id:
+            usage = await self._settled_usage(usage, request_id)
+        metadata = OtariMetadata(
+            request_id=request_id,
+            usage=usage,
+            finish_reason=self._finish_reason(document),
+        )
+        try:
+            content = self._structured_content(document)
+        except OtariError as error:
+            error.metadata = metadata
+            raise
         try:
             result = output_type.model_validate_json(content)
         except ValidationError as exc:
@@ -198,14 +216,14 @@ class OtariClient:
                 if any(error["type"] == "json_invalid" for error in exc.errors())
                 else "otari_schema_error"
             )
-            raise OtariError(code, retryable=False) from None
+            raise OtariError(
+                code,
+                retryable=False,
+                metadata=metadata,
+                validation_issues=self._validation_issues(exc, output_type),
+            ) from None
 
-        request_id = response.headers.get("X-Otari-Request-ID")
-        usage = self._usage(document)
-        if usage.cost_usd is None and request_id:
-            usage = await self._settled_usage(usage, request_id)
-
-        return result, OtariMetadata(request_id=request_id, usage=usage)
+        return result, metadata
 
     async def _settled_usage(self, usage: OtariUsage, request_id: str) -> OtariUsage:
         """Fill in the settled cost that the response did not carry inline.
@@ -356,7 +374,13 @@ class OtariClient:
     def _structured_content(document: dict[str, Any]) -> str:
         try:
             choice = document["choices"][0]
+            if not isinstance(choice, dict):
+                raise TypeError
+            if choice.get("finish_reason") == "length":
+                raise OtariError("otari_output_truncated", retryable=False)
             message = choice["message"]
+            if not isinstance(message, dict):
+                raise TypeError
             if message.get("refusal"):
                 raise OtariError("otari_refusal", retryable=False)
             content = message["content"]
@@ -372,6 +396,45 @@ class OtariClient:
         if stripped.startswith("```\n") and stripped.endswith("\n```"):
             return stripped.removeprefix("```\n").removesuffix("\n```").strip()
         return content
+
+    @staticmethod
+    def _finish_reason(document: dict[str, Any]) -> str | None:
+        choices = document.get("choices")
+        if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+            return None
+        finish_reason = choices[0].get("finish_reason")
+        return finish_reason if isinstance(finish_reason, str) else None
+
+    @staticmethod
+    def _validation_issues(
+        error: ValidationError,
+        output_type: type[BaseModel],
+    ) -> tuple[str, ...]:
+        field_names: set[str] = set()
+
+        def collect_fields(value: object) -> None:
+            if isinstance(value, dict):
+                properties = value.get("properties")
+                if isinstance(properties, dict):
+                    field_names.update(properties)
+                for child in value.values():
+                    collect_fields(child)
+            elif isinstance(value, list):
+                for child in value:
+                    collect_fields(child)
+
+        collect_fields(output_type.model_json_schema())
+        issues: list[str] = []
+        for item in error.errors(include_url=False, include_context=False, include_input=False)[:8]:
+            location = "$"
+            for part in item["loc"]:
+                if isinstance(part, int):
+                    location += f"[{part}]"
+                else:
+                    safe_part = part if part in field_names else "<unexpected_field>"
+                    location += f".{safe_part}"
+            issues.append(f"{location}:{item['type']}")
+        return tuple(issues)
 
     @classmethod
     def _usage(cls, document: dict[str, Any]) -> OtariUsage:

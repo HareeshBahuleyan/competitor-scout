@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
 BoundedText = Annotated[str, Field(min_length=1, max_length=1000)]
 EvidenceIndex = Annotated[int, Field(ge=0)]
+ProviderUrlText = Annotated[str, Field(min_length=1, max_length=2083)]
 
 
 class StrictContract(BaseModel):
@@ -157,6 +158,31 @@ class EvidenceCandidate(StrictContract):
     )
 
 
+class ChildEvidencePayload(StrictContract):
+    """Provider-compatible evidence shape before application validation."""
+
+    source_url: ProviderUrlText
+    source_title: str = Field(min_length=1, max_length=500)
+    source_type: SourceType
+    quoted_text: str = Field(min_length=20, max_length=5000)
+    normalized_claim: str = Field(min_length=1, max_length=1000)
+    published_at: Annotated[str, Field(min_length=1, max_length=100)] | None
+    confidence: float = Field(ge=0, le=1)
+    limitations: list[Annotated[str, Field(min_length=1, max_length=500)]] = Field(
+        max_length=10,
+    )
+
+
+class ChildTaskPayload(StrictContract):
+    """Structured child output accepted from the provider wire contract."""
+
+    sources_inspected: list[ProviderUrlText] = Field(max_length=50)
+    evidence: list[ChildEvidencePayload] = Field(max_length=50)
+    limitations: list[Annotated[str, Field(min_length=1, max_length=500)]] = Field(
+        max_length=10,
+    )
+
+
 class ChildTaskResult(StrictContract):
     sources_inspected: list[HttpUrl] = Field(max_length=50)
     evidence: list[EvidenceCandidate] = Field(max_length=50)
@@ -223,5 +249,5 @@ class SynthesisResult(StrictContract):
 
 
 class InitialSynthesisResult(StrictContract):
-    findings: list[FindingCandidate] = Field(max_length=50)
+    findings: list[FindingCandidate] = Field(max_length=10)
     starting_snapshot: StartingSnapshotCandidate

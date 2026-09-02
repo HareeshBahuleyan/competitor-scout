@@ -6,8 +6,13 @@ from pathlib import Path
 import httpx
 import pytest
 
-from competitor_scout.agents.client import OtariClient, OtariError, OtariMetadata
-from competitor_scout.agents.contracts import ScoutPlan
+from competitor_scout.agents.client import (
+    OtariClient,
+    OtariError,
+    OtariMetadata,
+    hosted_json_schema,
+)
+from competitor_scout.agents.contracts import ChildTaskPayload, ScoutPlan
 from competitor_scout.config import Settings
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "otari" / "chat_completion.json"
@@ -31,6 +36,17 @@ def settings(*, ai_token: str = "hosted-ai-token", cost_lookup_attempts: int = 3
 
 def fixture_bytes() -> bytes:
     return FIXTURE.read_bytes()
+
+
+def test_child_wire_schema_requires_provider_compatible_fields() -> None:
+    schema = hosted_json_schema(ChildTaskPayload)
+    evidence_schema = schema["$defs"]["ChildEvidencePayload"]
+
+    assert set(schema["required"]) == set(schema["properties"])
+    assert set(evidence_schema["required"]) == set(evidence_schema["properties"])
+    assert evidence_schema["properties"]["source_url"]["type"] == "string"
+    assert "format" not in evidence_schema["properties"]["source_url"]
+    assert "format" not in json.dumps(evidence_schema["properties"]["published_at"])
 
 
 async def test_structured_completion_sends_hosted_contract_and_parses_usage() -> None:
@@ -296,7 +312,9 @@ async def test_transport_errors_are_retryable_and_sanitized(
     assert raised.value.__cause__ is None
 
 
-@pytest.mark.parametrize("case", ["malformed_json", "missing_choice", "refusal", "schema"])
+@pytest.mark.parametrize(
+    "case", ["malformed_json", "missing_choice", "refusal", "truncated", "schema"]
+)
 async def test_invalid_success_responses_fail_safely(case: str) -> None:
     async def handler(_: httpx.Request) -> httpx.Response:
         if case == "malformed_json":
@@ -307,6 +325,18 @@ async def test_invalid_success_responses_fail_safely(case: str) -> None:
             return httpx.Response(
                 200,
                 json={"choices": [{"message": {"refusal": "provider detail", "content": None}}]},
+            )
+        if case == "truncated":
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {
+                            "finish_reason": "length",
+                            "message": {"content": '{"tasks": []}'},
+                        }
+                    ]
+                },
             )
         return httpx.Response(
             200,
@@ -327,8 +357,74 @@ async def test_invalid_success_responses_fail_safely(case: str) -> None:
     expected = "otari_refusal" if case == "refusal" else "otari_invalid_response"
     if case == "schema":
         expected = "otari_schema_error"
+    if case == "truncated":
+        expected = "otari_output_truncated"
     assert raised.value.code == expected
     assert "provider detail" not in str(raised.value)
+
+
+async def test_schema_error_retains_safe_response_metadata_and_validation_locations() -> None:
+    invalid_content = json.dumps(
+        {
+            "tasks": [
+                {
+                    "kind": "private-provider-value",
+                    "objective": "Research a bounded topic.",
+                    "source_urls": [],
+                    "search_query": "bounded topic",
+                    "expected_category": "product",
+                    "max_search_calls": 1,
+                    "completion_criteria": "Return quoted evidence or none.",
+                    "private-provider-field": "private-provider-detail",
+                }
+            ]
+        }
+    )
+
+    async def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {"content": invalid_content},
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 23,
+                    "completion_tokens": 11,
+                    "cost_usd": "0.0042",
+                    "pricing_source": "hosted_catalog",
+                },
+            },
+            headers={"X-Otari-Request-ID": "req_schema_failure"},
+        )
+
+    async with OtariClient(settings(), transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(OtariError) as raised:
+            await client.structured_completion(
+                model="competitor-scout-main",
+                messages=[{"role": "user", "content": "Plan."}],
+                output_type=ScoutPlan,
+                session_label="run:schema-metadata",
+                max_completion_tokens=100,
+                deadline_seconds=5,
+            )
+
+    error = raised.value
+    assert error.code == "otari_schema_error"
+    assert error.metadata is not None
+    assert error.metadata.request_id == "req_schema_failure"
+    assert error.metadata.finish_reason == "stop"
+    assert error.metadata.usage.input_tokens == 23
+    assert error.metadata.usage.output_tokens == 11
+    assert "$.tasks[0].kind:enum" in error.validation_issues
+    assert "$.tasks[0].<unexpected_field>:extra_forbidden" in error.validation_issues
+    assert "private-provider-value" not in str(error.validation_issues)
+    assert "private-provider-field" not in str(error.validation_issues)
+    assert "private-provider-detail" not in str(error.validation_issues)
+    assert "private-provider-value" not in str(error)
 
 
 @pytest.mark.parametrize(

@@ -39,6 +39,8 @@ def test_operational_defaults_are_bounded() -> None:
     assert settings.max_source_discovery_search_calls == 8
     assert settings.main_input_token_limit == 32_000
     assert settings.main_output_token_limit == 4_000
+    assert settings.planning_output_token_limit == 8_000
+    assert settings.initial_synthesis_output_token_limit == 8_000
     assert settings.child_input_token_limit == 16_000
     assert settings.child_output_token_limit == 3_000
     assert settings.planning_deadline_seconds == 60

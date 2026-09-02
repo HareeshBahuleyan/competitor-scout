@@ -144,6 +144,13 @@ def test_initial_synthesis_requires_a_grounded_snapshot() -> None:
     assert result.starting_snapshot.sections[0].topic.value == "positioning"
 
 
+def test_initial_synthesis_limits_findings_to_ten() -> None:
+    with pytest.raises(ValidationError, match="too_long"):
+        InitialSynthesisResult.model_validate_json(
+            json.dumps({"findings": [finding()] * 11, "starting_snapshot": snapshot()})
+        )
+
+
 @pytest.mark.parametrize(
     "invalid_snapshot",
     [

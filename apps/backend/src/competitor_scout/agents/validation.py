@@ -4,8 +4,12 @@ from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime
 
+from pydantic import HttpUrl, TypeAdapter, ValidationError
+
 from competitor_scout.agents.contracts import (
     ChildTaskKind,
+    ChildTaskPayload,
+    ChildTaskResult,
     EvidenceCandidate,
     SourceType,
 )
@@ -17,6 +21,7 @@ NEWS_SCOPE_GUARD_NOTE = (
     "Inspected-URL membership is an offline app guard only; real hosted web-search "
     "provenance remains staging-gated before production enablement."
 )
+HTTP_URL_ADAPTER = TypeAdapter(HttpUrl)
 
 
 @dataclass(frozen=True)
@@ -37,6 +42,50 @@ class RejectedEvidence:
     index: int
     source_url: str
     reason: str
+
+
+def _validation_reason(prefix: str, error: ValidationError) -> str:
+    first = error.errors(include_url=False, include_context=False, include_input=False)[0]
+    location = prefix
+    for part in first["loc"]:
+        location += f"[{part}]" if isinstance(part, int) else f".{part}"
+    return f"{location}:{first['type']}"
+
+
+def normalize_child_payload(
+    payload: ChildTaskPayload,
+) -> tuple[ChildTaskResult, list[str]]:
+    """Convert provider-compatible child output into the strict domain contract.
+
+    URL and datetime formats are not available in the hosted schema subset, so
+    invalid individual values are rejected here without discarding unrelated
+    evidence from the same bounded response.
+    """
+
+    sources_inspected: list[HttpUrl] = []
+    evidence: list[EvidenceCandidate] = []
+    rejected: list[str] = []
+
+    for index, value in enumerate(payload.sources_inspected):
+        try:
+            sources_inspected.append(HTTP_URL_ADAPTER.validate_python(value))
+        except ValidationError as error:
+            rejected.append(_validation_reason(f"sources_inspected[{index}]", error))
+
+    for index, candidate in enumerate(payload.evidence):
+        try:
+            evidence.append(EvidenceCandidate.model_validate(candidate.model_dump(), strict=False))
+        except ValidationError as error:
+            rejected.append(_validation_reason(f"evidence[{index}]", error))
+
+    return (
+        ChildTaskResult(
+            sources_inspected=sources_inspected,
+            evidence=evidence,
+            limitations=payload.limitations,
+        ),
+        rejected,
+    )
 
 
 def _normalized_quote(value: str) -> str:

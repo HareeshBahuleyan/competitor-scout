@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from competitor_scout.agents.client import OtariError, OtariMetadata, OtariUsage
 from competitor_scout.agents.contracts import (
+    ChildTaskPayload,
     ChildTaskResult,
     InitialSynthesisResult,
     ScoutPlan,
@@ -141,6 +142,10 @@ def first_party_child_result(*, include_out_of_scope: bool = False) -> ChildTask
     )
 
 
+def child_payload(result: ChildTaskResult) -> ChildTaskPayload:
+    return ChildTaskPayload.model_validate_json(result.model_dump_json())
+
+
 def synthesis() -> SynthesisResult:
     return SynthesisResult.model_validate_json(
         json.dumps(
@@ -175,6 +180,7 @@ class FakeOtari:
         planning_schema_failures: int = 0,
         planning_delay_seconds: float = 0,
         synthesis_schema_failures: int = 0,
+        child_schema_failures: int = 0,
         synthesis_delay_seconds: float = 0,
         known_cost: Decimal | None = None,
         input_tokens: int = 10,
@@ -191,6 +197,7 @@ class FakeOtari:
         self.planning_schema_failures = planning_schema_failures
         self.planning_delay_seconds = planning_delay_seconds
         self.synthesis_schema_failures = synthesis_schema_failures
+        self.child_schema_failures = child_schema_failures
         self.synthesis_delay_seconds = synthesis_delay_seconds
         self.known_cost = known_cost
         self.input_tokens = input_tokens
@@ -215,7 +222,7 @@ class FakeOtari:
                 self.planning_schema_failures -= 1
                 raise OtariError("otari_schema_error", retryable=False)
             return self.plan, self._metadata("plan")
-        if output_type is ChildTaskResult:
+        if output_type is ChildTaskPayload:
             messages = kwargs["messages"]
             assert isinstance(messages, list)
             payload = json.loads(messages[1]["content"])
@@ -229,6 +236,14 @@ class FakeOtari:
                 if self.active_children >= target:
                     self.child_gate.set()
                 await asyncio.wait_for(self.child_gate.wait(), timeout=1)
+                if self.child_schema_failures:
+                    self.child_schema_failures -= 1
+                    raise OtariError(
+                        "otari_schema_error",
+                        retryable=False,
+                        metadata=self._metadata(f"child-schema-{index}", finish_reason="stop"),
+                        validation_issues=("$.evidence[0].published_at:datetime_parsing",),
+                    )
                 if index in self.budget_children:
                     raise OtariError("otari_budget_exceeded", retryable=False, status_code=403)
                 if index in self.fail_children:
@@ -239,19 +254,19 @@ class FakeOtari:
                     raise OtariError("otari_upstream_error", retryable=True)
                 if payload["task"]["kind"] == "first_party_source_review":
                     if self.incomplete_while_web_search and kwargs.get("enable_web_search"):
-                        return ChildTaskResult(
+                        return ChildTaskPayload(
                             sources_inspected=[], evidence=[], limitations=["Page was inaccessible"]
                         ), self._metadata(f"child-{index}")
                     if self.empty_while_web_search and kwargs.get("enable_web_search"):
-                        return ChildTaskResult(
+                        return ChildTaskPayload(
                             sources_inspected=payload["task"]["source_urls"],
                             evidence=[],
                             limitations=[],
                         ), self._metadata(f"child-{index}")
-                    return first_party_child_result(
-                        include_out_of_scope=self.first_party_out_of_scope
+                    return child_payload(
+                        first_party_child_result(include_out_of_scope=self.first_party_out_of_scope)
                     ), self._metadata(f"child-{index}")
-                return child_result(index), self._metadata(f"child-{index}")
+                return child_payload(child_result(index)), self._metadata(f"child-{index}")
             finally:
                 self.active_children -= 1
         if output_type is SynthesisResult:
@@ -292,7 +307,7 @@ class FakeOtari:
             return result, self._metadata("initial-synthesis")
         raise AssertionError(f"unexpected output type: {output_type}")
 
-    def _metadata(self, label: str) -> OtariMetadata:
+    def _metadata(self, label: str, *, finish_reason: str | None = None) -> OtariMetadata:
         return OtariMetadata(
             request_id=f"req-{label}-{len(self.calls)}",
             usage=OtariUsage(
@@ -302,6 +317,7 @@ class FakeOtari:
                 cost_usd=self.known_cost,
                 pricing_source="hosted_catalog" if self.known_cost is not None else None,
             ),
+            finish_reason=finish_reason,
         )
 
 
@@ -543,15 +559,17 @@ async def test_daily_run_happy_path_is_bounded_auditable_and_publishes(daily_sto
     synthesis_call = next(call for call in fake.calls if call["output_type"] is SynthesisResult)
     assert planning_call["model"] == "competitor-scout-main"
     assert planning_call["enable_web_search"] is False
+    assert planning_call["max_completion_tokens"] == 8_000
     assert synthesis_call["model"] == "competitor-scout-main"
     assert synthesis_call["enable_web_search"] is False
+    assert synthesis_call["max_completion_tokens"] == 4_000
     synthesis_messages_payload = synthesis_call["messages"]
     assert isinstance(synthesis_messages_payload, list)
     synthesis_payload = json.loads(synthesis_messages_payload[1]["content"])
     assert {item["expected_category_hint"] for item in synthesis_payload["validated_evidence"]} == {
         "product"
     }
-    child_calls = [call for call in fake.calls if call["output_type"] is ChildTaskResult]
+    child_calls = [call for call in fake.calls if call["output_type"] is ChildTaskPayload]
     assert all(call["model"] == "competitor-scout-child" for call in child_calls)
     assert all(call["enable_web_search"] is True for call in child_calls)
     assert all(call["max_tool_iterations"] == 4 for call in child_calls)
@@ -584,6 +602,65 @@ async def test_planning_repair_gets_a_fresh_request_deadline(daily_store) -> Non
     assert status is ScoutRunStatus.COMPLETED
     assert planner is not None and planner.status is AgentTaskStatus.SUCCEEDED
     assert planner.attempt_count == 2
+
+
+async def test_child_schema_retry_receives_repair_location_and_counts_usage(daily_store) -> None:
+    sessions = daily_store
+    _user_id, _competitor_id, run_id = await seed_daily_run(sessions)
+    fake = FakeOtari(task_count=1, child_schema_failures=1)
+    orchestrator = await make_orchestrator(sessions, fake, settings())
+
+    status = await orchestrator.execute_daily_run(run_id)
+
+    child_calls = [call for call in fake.calls if call["output_type"] is ChildTaskPayload]
+    first_messages = child_calls[0]["messages"]
+    repaired_messages = child_calls[1]["messages"]
+    assert isinstance(first_messages, list)
+    assert isinstance(repaired_messages, list)
+    assert "previous attempt failed validation" not in first_messages[0]["content"]
+    assert "$.evidence[0].published_at:datetime_parsing" in repaired_messages[0]["content"]
+
+    async with sessions() as session:
+        run = await session.get(ScoutRun, run_id)
+        child = await session.scalar(
+            select(AgentTask).where(
+                AgentTask.scout_run_id == run_id,
+                AgentTask.role == AgentTaskRole.CHILD_RESEARCHER,
+            )
+        )
+
+    assert status is ScoutRunStatus.COMPLETED
+    assert run is not None and run.input_tokens == 40 and run.output_tokens == 20
+    assert child is not None and child.attempt_count == 2
+
+
+async def test_terminal_child_schema_error_persists_safe_metadata(daily_store) -> None:
+    sessions = daily_store
+    _user_id, _competitor_id, run_id = await seed_daily_run(sessions)
+    fake = FakeOtari(task_count=1, child_schema_failures=2)
+    orchestrator = await make_orchestrator(sessions, fake, settings())
+
+    status = await orchestrator.execute_daily_run(run_id)
+
+    async with sessions() as session:
+        run = await session.get(ScoutRun, run_id)
+        child = await session.scalar(
+            select(AgentTask).where(
+                AgentTask.scout_run_id == run_id,
+                AgentTask.role == AgentTaskRole.CHILD_RESEARCHER,
+            )
+        )
+
+    assert status is ScoutRunStatus.FAILED
+    assert run is not None and run.input_tokens == 30 and run.output_tokens == 15
+    assert child is not None
+    assert child.error_code == "otari_schema_error"
+    assert child.otari_request_id is not None
+    assert child.input_tokens == 10 and child.output_tokens == 5
+    assert child.error_summary == (
+        "agent task output failed validation after finish_reason=stop at "
+        "$.evidence[0].published_at:datetime_parsing"
+    )
 
 
 async def test_synthesis_repair_gets_a_fresh_request_deadline(daily_store) -> None:
@@ -639,7 +716,7 @@ async def test_first_party_child_search_stays_within_approved_scope(daily_store)
 
     status = await orchestrator.execute_daily_run(run_id)
 
-    child_call = next(call for call in fake.calls if call["output_type"] is ChildTaskResult)
+    child_call = next(call for call in fake.calls if call["output_type"] is ChildTaskPayload)
     child_payload = json.loads(child_call["messages"][1]["content"])
     assert status is ScoutRunStatus.COMPLETED
     assert child_call["enable_web_search"] is True
@@ -683,13 +760,13 @@ async def test_first_party_child_uses_web_search_first_when_firecrawl_is_configu
 
     status = await orchestrator.execute_daily_run(run_id)
 
-    child_call = next(call for call in fake.calls if call["output_type"] is ChildTaskResult)
+    child_call = next(call for call in fake.calls if call["output_type"] is ChildTaskPayload)
     child_system_prompt = child_call["messages"][0]["content"]
     assert status is ScoutRunStatus.COMPLETED
     assert child_call["enable_web_search"] is True
     assert child_call["mcp_server_ids"] is None
     assert "otari_web_search" in child_system_prompt
-    assert len([call for call in fake.calls if call["output_type"] is ChildTaskResult]) == 1
+    assert len([call for call in fake.calls if call["output_type"] is ChildTaskPayload]) == 1
 
 
 async def test_first_party_child_falls_back_to_firecrawl_when_web_search_fails(
@@ -722,7 +799,7 @@ async def test_first_party_child_falls_back_to_firecrawl_when_web_search_fails(
 
     status = await orchestrator.execute_daily_run(run_id)
 
-    child_calls = [call for call in fake.calls if call["output_type"] is ChildTaskResult]
+    child_calls = [call for call in fake.calls if call["output_type"] is ChildTaskPayload]
     assert status is ScoutRunStatus.COMPLETED
     # Otari web search keeps its configured retry (2 attempts), then gets exactly
     # one bonus Firecrawl attempt: 3 total, not 4 (which would double retries).
@@ -770,7 +847,7 @@ async def test_first_party_child_falls_back_when_web_search_misses_assigned_url(
 
     status = await orchestrator.execute_daily_run(run_id)
 
-    child_calls = [call for call in fake.calls if call["output_type"] is ChildTaskResult]
+    child_calls = [call for call in fake.calls if call["output_type"] is ChildTaskPayload]
     assert status is ScoutRunStatus.COMPLETED
     assert [call["enable_web_search"] for call in child_calls] == [True, False]
     assert [call["mcp_server_ids"] for call in child_calls] == [
@@ -806,7 +883,7 @@ async def test_first_party_child_does_not_fallback_when_all_urls_were_inspected(
 
     status = await orchestrator.execute_daily_run(run_id)
 
-    child_calls = [call for call in fake.calls if call["output_type"] is ChildTaskResult]
+    child_calls = [call for call in fake.calls if call["output_type"] is ChildTaskPayload]
     assert status is ScoutRunStatus.FAILED
     assert len(child_calls) == 1
     assert child_calls[0]["enable_web_search"] is True
@@ -847,7 +924,7 @@ async def test_first_party_child_fails_when_web_search_and_firecrawl_both_fail(
 
     status = await orchestrator.execute_daily_run(run_id)
 
-    child_calls = [call for call in fake.calls if call["output_type"] is ChildTaskResult]
+    child_calls = [call for call in fake.calls if call["output_type"] is ChildTaskPayload]
     assert status is ScoutRunStatus.FAILED
     assert len(child_calls) == 2
     assert [call["mcp_server_ids"] for call in child_calls] == [
@@ -867,7 +944,7 @@ async def test_news_discovery_child_keeps_web_search_when_firecrawl_configured(
 
     status = await orchestrator.execute_daily_run(run_id)
 
-    child_call = next(call for call in fake.calls if call["output_type"] is ChildTaskResult)
+    child_call = next(call for call in fake.calls if call["output_type"] is ChildTaskPayload)
     assert status is ScoutRunStatus.COMPLETED
     assert child_call["enable_web_search"] is True
     assert child_call["mcp_server_ids"] is None
@@ -934,7 +1011,10 @@ async def test_requested_initial_run_publishes_snapshot_before_completing(daily_
     }
     assert len(observations) == 1
     assert synthesis_task is not None and synthesis_task.task_kind == "initial_synthesis"
-    assert any(call["output_type"] is InitialSynthesisResult for call in fake.calls)
+    initial_synthesis_call = next(
+        call for call in fake.calls if call["output_type"] is InitialSynthesisResult
+    )
+    assert initial_synthesis_call["max_completion_tokens"] == 8_000
 
 
 @pytest.mark.parametrize(
@@ -1182,7 +1262,7 @@ async def test_known_planning_cost_at_run_limit_stops_before_children(daily_stor
     assert status is ScoutRunStatus.FAILED
     assert run is not None and run.failure_code == "run_cost_limit"
     assert run.settled_cost_usd == Decimal("1.000000")
-    assert not any(call["output_type"] is ChildTaskResult for call in fake.calls)
+    assert not any(call["output_type"] is ChildTaskPayload for call in fake.calls)
 
 
 async def test_known_daily_user_cost_at_limit_stops_before_otari(daily_store) -> None:
