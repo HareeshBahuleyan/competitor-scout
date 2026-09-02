@@ -235,7 +235,7 @@ describe("brief, settings, and aggregate usage schemas", () => {
     expect(
       weeklyBriefSchema.parse({
         ...base,
-        title: "Weekly brief: no material changes",
+        title: "Weekly digest: no material changes",
         executive_summary: "No accepted material changes were published during this weekly period.",
         sections: [],
       }).sections,

@@ -237,7 +237,7 @@ export const briefSectionSchema = z.object({
   references: z.array(briefFindingReferenceSchema).min(1).max(30),
 });
 
-export const EMPTY_BRIEF_TITLE = "Weekly brief: no material changes";
+export const EMPTY_BRIEF_TITLE = "Weekly digest: no material changes";
 export const EMPTY_BRIEF_EXECUTIVE_SUMMARY =
   "No accepted material changes were published during this weekly period.";
 

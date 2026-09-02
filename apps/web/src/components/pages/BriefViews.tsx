@@ -38,7 +38,7 @@ export function BriefsListView() {
           Your week in one page, backed by the updates behind it.
         </p>
       </header>
-      {query.isPending ? <LoadingState label="Loading weekly briefs…" rows={4} /> : null}
+      {query.isPending ? <LoadingState label="Loading weekly digests…" rows={4} /> : null}
       {query.isError ? (
         <p className="text-red-700" role="alert">
           {errorText(query.error)}
@@ -73,7 +73,7 @@ export function BriefDetailView({ briefId }: { briefId: string }) {
     queryKey: ["brief", briefId],
     queryFn: () => apiGetClient(`/api/v1/briefs/${briefId}`, weeklyBriefSchema),
   });
-  if (query.isPending) return <LoadingState label="Loading weekly brief…" rows={4} />;
+  if (query.isPending) return <LoadingState label="Loading the weekly digest…" rows={4} />;
   if (query.isError)
     return (
       <p className="text-red-700" role="alert">
@@ -134,7 +134,7 @@ export function BriefDetailView({ briefId }: { briefId: string }) {
         className="text-sm font-medium text-blue-700 hover:underline"
         href={`/runs/${brief.scout_run_id}`}
       >
-        View brief generation run
+        View the scan that produced this digest
       </Link>
     </article>
   );

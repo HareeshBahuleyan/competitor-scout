@@ -98,6 +98,8 @@ User-facing copy uses the reader's words, while routes, API paths, and schema fi
 
 Renaming a surface is a copy change only; do not rename routes or Zod fields to match, because the backend Pydantic model is the contract's source of truth.
 
+The vocabulary also governs strings the backend or the model authors and the interface renders verbatim, such as a weekly brief's title. Those are not frontend copy and cannot be corrected in a view, so check them when a surface is renamed. See `docs/architecture/agent-runtime.md` for the canonical empty-brief value and the migration it requires.
+
 ## Component ownership
 
 | Need                                                      | Preferred owner                       |
@@ -123,6 +125,12 @@ Use these semantic roles consistently:
 - Queued/inactive/secondary metadata: neutral slate.
 
 Always pair color with a text label, icon, shape, or position. Use `role="alert"` for errors requiring immediate attention and `role="status"` or an appropriate `aria-live` region for non-interruptive updates. Avoid announcing decorative skeleton rows repeatedly; provide one meaningful loading label.
+
+### Source management
+
+A competitor's sources are settings, not a review queue, so the detail page never re-asks a decision the reader already made. `SourceManagementList` groups them by whether scans use them — Monitored, Awaiting review, Not monitored — and offers only the action that changes the current state: Stop monitoring for a monitored source, Monitor for one that is not, and Monitor plus Dismiss for a source still awaiting review. The `suggested` / `approved` / `rejected` contract values stay on the API; the interface names the reader's state.
+
+Copy states the consequence next to the control: removing the last monitored source pauses daily monitoring, because the backend returns the competitor to discovering when no approved source remains. A source added from the detail page arrives awaiting review rather than silently entering the next scan.
 
 ## Forms and interaction
 

@@ -244,7 +244,7 @@ describe("weekly briefs", () => {
   it("renders an honest empty week without fabricated references and exposes empty/error states", async () => {
     vi.mocked(apiGetClient).mockResolvedValueOnce({
       ...brief,
-      title: "Weekly brief: no material changes",
+      title: "Weekly digest: no material changes",
       executive_summary: "No accepted material changes were published during this weekly period.",
       sections: [],
     } as never);
