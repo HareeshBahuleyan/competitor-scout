@@ -25,9 +25,6 @@ export default function LoginPage() {
         >
           Continue with Google
         </a>
-        <p className="mt-5 text-center text-xs text-slate-500">
-          Private alpha · Google sign-up is limited to ten users
-        </p>
       </section>
     </main>
   );

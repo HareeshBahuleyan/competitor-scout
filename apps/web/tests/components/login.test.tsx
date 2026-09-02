@@ -14,10 +14,4 @@ describe("LoginPage", () => {
       "/auth/google/login",
     );
   });
-
-  it("explains that Google sign-up is capacity limited", () => {
-    render(<LoginPage />);
-
-    expect(screen.getByText(/google sign-up is limited to ten users/i)).toBeVisible();
-  });
 });
