@@ -19,11 +19,19 @@ services:
     build:
       context: ./apps/backend
       dockerfile: Dockerfile
+      target: dev
     env_file:
       - .env
     environment:
       DATABASE_URL: postgresql+asyncpg://competitor_scout:competitor_scout@postgres:5432/competitor_scout
     command: ["alembic", "upgrade", "head"]
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./apps/backend/migrations
+          target: /app/migrations
+        - action: rebuild
+          path: ./apps/backend/pyproject.toml
     depends_on:
       postgres:
         condition: service_healthy
@@ -33,6 +41,7 @@ services:
     build:
       context: ./apps/backend
       dockerfile: Dockerfile
+      target: dev
     env_file:
       - .env
     environment:
@@ -59,6 +68,15 @@ services:
     depends_on:
       prestart:
         condition: service_completed_successfully
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./apps/backend/src
+          target: /app/src
+        - action: rebuild
+          path: ./apps/backend/pyproject.toml
+        - action: rebuild
+          path: ./apps/backend/migrations
     init: true
     restart: unless-stopped
 
@@ -66,6 +84,7 @@ services:
     build:
       context: ./apps/backend
       dockerfile: Dockerfile
+      target: dev
     env_file:
       - .env
     environment:
@@ -76,6 +95,15 @@ services:
         condition: service_completed_successfully
       backend-api:
         condition: service_healthy
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./apps/backend/src
+          target: /app/src
+        - action: rebuild
+          path: ./apps/backend/pyproject.toml
+        - action: rebuild
+          path: ./apps/backend/migrations
     init: true
     restart: unless-stopped
 
