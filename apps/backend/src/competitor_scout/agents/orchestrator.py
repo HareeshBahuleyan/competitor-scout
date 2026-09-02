@@ -687,8 +687,17 @@ class ScoutOrchestrator:
         unsettled = False
         enable_web_search, mcp_server_ids, tool_name = self._child_tool_selection(planned.kind)
         deadline = asyncio.get_running_loop().time() + self._settings.child_deadline_seconds
+        primary_attempts = self._settings.max_child_retries + 1
+        # A FireCrawl-tooled task gets exactly one bonus attempt on otari_web_search
+        # if FireCrawl never succeeds. This is additive, not carved out of
+        # max_child_retries: FireCrawl keeps its full configured retry budget, and
+        # the fallback attempt reuses the task's own max_search_calls/tool-iteration
+        # cap rather than a larger one, so neither budget is doubled or shrunk.
+        firecrawl_fallback_available = bool(mcp_server_ids)
+        firecrawl_fallback_used = False
+        total_attempts = primary_attempts + (1 if firecrawl_fallback_available else 0)
         async with self._child_semaphore:
-            for attempt in range(1, self._settings.max_child_retries + 2):
+            for attempt in range(1, total_attempts + 1):
                 metadata: OtariMetadata | None = None
                 await self._set_task_attempt(task_id, attempt)
                 try:
@@ -747,11 +756,24 @@ class ScoutOrchestrator:
                         "otari_schema_error",
                         "otari_invalid_response",
                     }
-                    if retryable and attempt <= self._settings.max_child_retries:
+                    if retryable and attempt < primary_attempts:
                         delay = self._retry_delay(error, attempt)
                         if delay < deadline - asyncio.get_running_loop().time():
                             await self._sleep(delay)
                             continue
+                    # Reaching here means the current tool cannot continue: either the
+                    # error was not retryable, or the primary retry budget above is
+                    # spent. Either way is the right moment for the one-shot fallback.
+                    if (
+                        firecrawl_fallback_available
+                        and not firecrawl_fallback_used
+                        and deadline - asyncio.get_running_loop().time() > 0
+                    ):
+                        firecrawl_fallback_used = True
+                        enable_web_search = True
+                        mcp_server_ids = None
+                        tool_name = "otari_web_search"
+                        continue
                     await self._fail_task(
                         task_id,
                         code,
