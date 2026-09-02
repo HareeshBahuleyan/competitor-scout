@@ -32,6 +32,14 @@ import {
   type Source,
 } from "@/lib/schemas";
 
+const COMPETITOR_LIMIT = 10;
+
+const competitorStatusStyles: Record<string, string> = {
+  active: "bg-emerald-50 text-emerald-700",
+  discovering: "bg-amber-50 text-amber-800",
+  paused: "bg-slate-100 text-slate-700",
+};
+
 function errorText(error: unknown) {
   if (typeof error === "object" && error && "detail" in error) {
     const detail = error.detail;
@@ -48,6 +56,7 @@ export function CompetitorsListView() {
     queryKey: ["competitors"],
     queryFn: () => apiGetClient("/api/v1/competitors", competitorPageSchema),
   });
+  const competitorCount = query.data?.items.length ?? 0;
   return (
     <section className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -56,12 +65,31 @@ export function CompetitorsListView() {
           <h1 className="mt-1 text-4xl font-semibold">Competitors</h1>
           <p className="mt-2 text-slate-600">Companies monitored by your scout.</p>
         </div>
-        <Link
-          className="inline-flex min-h-10 items-center rounded-xl bg-slate-950 px-4 py-2 font-semibold text-white"
-          href="/competitors/new"
-        >
-          Add competitor
-        </Link>
+        <div className="flex flex-col items-end gap-3">
+          <div className="w-44">
+            <div className="flex items-center justify-between text-xs text-slate-500">
+              <span>Competitors</span>
+              <span>
+                {competitorCount} of {COMPETITOR_LIMIT}
+              </span>
+            </div>
+            <progress
+              aria-label="Competitor slots used"
+              className="mt-1.5 w-full"
+              max={COMPETITOR_LIMIT}
+              value={competitorCount}
+            />
+            <p className="sr-only">
+              {competitorCount} of {COMPETITOR_LIMIT} competitor slots used
+            </p>
+          </div>
+          <Link
+            className="inline-flex min-h-10 items-center rounded-xl bg-slate-950 px-4 py-2 font-semibold text-white"
+            href="/competitors/new"
+          >
+            Add competitor
+          </Link>
+        </div>
       </div>
       {query.isPending ? <LoadingState label="Loading competitors…" rows={4} /> : null}
       {query.isError ? (
@@ -75,28 +103,31 @@ export function CompetitorsListView() {
       {query.data?.items.length ? (
         <ul className="grid gap-4 md:grid-cols-2">
           {query.data.items.map((item) => (
-            <li className="surface surface-interactive p-5" key={item.id}>
+            <li className="surface surface-interactive card-target p-5" key={item.id}>
               <div className="flex justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <CompetitorFavicon domain={item.primary_domain} name={item.name} size="md" />
                   <h2 className="font-semibold truncate">
-                    <Link className="hover:underline" href={`/competitors/${item.id}`}>
+                    <Link className="card-link" href={`/competitors/${item.id}`}>
                       {item.name}
                     </Link>
                   </h2>
                 </div>
-                <span className="text-sm capitalize text-slate-500 shrink-0">{item.status}</span>
+                <span
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium capitalize ${
+                    competitorStatusStyles[item.status] ?? "bg-slate-100 text-slate-700"
+                  }`}
+                >
+                  {item.status}
+                </span>
               </div>
               <p className="mt-2 text-sm text-slate-600">
                 {item.description || item.primary_domain}
               </p>
               {item.status === "discovering" ? (
-                <Link
-                  className="mt-3 inline-flex text-sm font-semibold text-blue-700 hover:underline"
-                  href={`/competitors/${item.id}`}
-                >
-                  Finish setup →
-                </Link>
+                <p className="mt-3 text-sm font-semibold text-[var(--color-accent-strong)]">
+                  Finish setup <span aria-hidden="true">→</span>
+                </p>
               ) : null}
             </li>
           ))}

@@ -17,8 +17,6 @@ import {
   type Run,
 } from "@/lib/schemas";
 
-const COMPETITOR_LIMIT = 10;
-
 function errorText(error: unknown) {
   return error instanceof Error ? error.message : "Something went wrong.";
 }
@@ -198,23 +196,6 @@ export function DashboardView() {
             ) : (
               <p className="p-5 text-sm text-slate-600">No active competitors yet.</p>
             )}
-            <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-4">
-              <div className="flex items-center justify-between gap-3 text-xs text-slate-500">
-                <span>Monitoring capacity</span>
-                <span>
-                  {competitorPage.items.length} of {COMPETITOR_LIMIT}
-                </span>
-              </div>
-              <progress
-                aria-label="Competitor slots used"
-                className="mt-2 w-full"
-                max={COMPETITOR_LIMIT}
-                value={competitorPage.items.length}
-              />
-              <p className="sr-only">
-                {competitorPage.items.length} of {COMPETITOR_LIMIT} competitor slots used
-              </p>
-            </div>
           </section>
 
           <section aria-labelledby="latest-brief-heading" className="space-y-3">

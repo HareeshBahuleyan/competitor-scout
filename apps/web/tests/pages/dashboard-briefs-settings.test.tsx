@@ -139,7 +139,7 @@ afterEach(() => {
 });
 
 describe("dashboard", () => {
-  it("shows material findings, active competitors with latest status, run warnings, brief, and limit use", async () => {
+  it("shows material findings, active competitors with latest status, run warnings, and brief", async () => {
     mockDashboard({
       findings: [
         finding,
@@ -184,7 +184,6 @@ describe("dashboard", () => {
       "href",
       `/briefs/${brief.id}`,
     );
-    expect(screen.getByText("1 of 10 competitor slots used")).toBeInTheDocument();
     expect(apiGetClient).toHaveBeenCalledWith(
       "/api/v1/findings?significance=critical&limit=5",
       expect.anything(),
