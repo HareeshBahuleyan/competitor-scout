@@ -1,39 +1,28 @@
 import { formatUserDateTime } from "@/lib/dates";
+import { partialReasonLabels } from "@/lib/runs";
 import type { Run } from "@/lib/schemas";
 
 const runTypeLabels: Record<Run["run_type"], string> = {
   daily_scout: "Daily scan",
   manual_scout: "Manual scan",
   source_discovery: "Source discovery",
-  weekly_brief: "Weekly brief",
+  weekly_brief: "Weekly Digest",
 };
 
-const failureCopy: Record<string, { action?: string; summary: string }> = {
-  competitor_inactive: {
-    action: "Review monitor settings.",
-    summary: "This monitor is not active.",
-  },
-  daily_cost_limit: {
-    summary: "The daily usage limit was reached before this scan could finish.",
-  },
-  no_valid_evidence: {
-    action: "Review the monitored sources and try again.",
-    summary: "The scan could not verify any usable evidence.",
-  },
+const failureActions: Record<string, string> = {
+  competitor_inactive: "Review the monitor settings before trying again.",
+  no_valid_evidence: "Review the monitored sources before trying again.",
 };
 
 export function runTypeLabel(runType: Run["run_type"]): string {
   return runTypeLabels[runType];
 }
 
-function humanize(value: string) {
-  const words = value.replaceAll("_", " ");
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
 export function RunOutcomeSummary({ run, timeZone }: { run: Run; timeZone: string }) {
-  const failure = run.failure_code ? failureCopy[run.failure_code] : undefined;
-  const findingLabel = `${run.finding_count} finding${run.finding_count === 1 ? "" : "s"} published`;
+  const failureAction = run.failure_code ? failureActions[run.failure_code] : undefined;
+  const partialLabels = partialReasonLabels(run.partial_reasons, run.partial_summaries);
+  const findingLabel = `${run.finding_count} update${run.finding_count === 1 ? "" : "s"} published`;
+  const outcomeTime = run.started_at ?? run.scheduled_for;
 
   return (
     <section aria-labelledby="run-outcome-heading" className="surface space-y-4 p-6">
@@ -50,11 +39,9 @@ export function RunOutcomeSummary({ run, timeZone }: { run: Run; timeZone: strin
       </div>
       <dl className="grid gap-3 text-sm sm:grid-cols-2">
         <div>
-          <dt className="font-medium text-slate-500">Started</dt>
+          <dt className="font-medium text-slate-500">{run.started_at ? "Started" : "Scheduled"}</dt>
           <dd>
-            <time dateTime={run.scheduled_for}>
-              {formatUserDateTime(run.scheduled_for, timeZone)}
-            </time>
+            <time dateTime={outcomeTime}>{formatUserDateTime(outcomeTime, timeZone)}</time>
           </dd>
         </div>
         <div>
@@ -62,17 +49,17 @@ export function RunOutcomeSummary({ run, timeZone }: { run: Run; timeZone: strin
           <dd>{findingLabel}</dd>
         </div>
       </dl>
-      {failure ? (
+      {run.failure_summary ? (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
-          <p className="font-semibold">{failure.summary}</p>
-          {failure.action ? <p className="mt-1">{failure.action}</p> : null}
+          <p className="font-semibold">{run.failure_summary}</p>
+          {failureAction ? <p className="mt-1">{failureAction}</p> : null}
         </div>
-      ) : run.partial_reasons.length ? (
+      ) : partialLabels.length ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
           <p className="font-semibold">The scan completed with some limitations.</p>
           <ul className="mt-2 list-disc pl-5">
-            {run.partial_reasons.map((reason) => (
-              <li key={reason}>{humanize(reason)}</li>
+            {partialLabels.map((reason) => (
+              <li key={reason}>{reason}</li>
             ))}
           </ul>
         </div>

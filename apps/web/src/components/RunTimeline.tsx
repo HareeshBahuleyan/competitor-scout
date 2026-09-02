@@ -1,3 +1,6 @@
+import { formatUserDateTime } from "@/lib/dates";
+import { partialReasonLabels } from "@/lib/runs";
+
 export type RunStatus =
   "queued" | "planning" | "gathering" | "synthesizing" | "completed" | "partial" | "failed";
 
@@ -9,7 +12,6 @@ export type RunTimelineStep = {
 export type RunUsage = {
   input_tokens?: number | null;
   output_tokens?: number | null;
-  tool_calls?: number | null;
   latency_ms?: number | null;
   settled_cost_usd?: string | null;
 };
@@ -17,6 +19,7 @@ export type RunUsage = {
 type RunTimelineProps = {
   failure_reason?: string | null;
   partial_reasons?: readonly string[];
+  partial_summaries?: readonly string[];
   retry_count: number;
   status: RunStatus;
   steps: readonly RunTimelineStep[];
@@ -46,6 +49,7 @@ function knownCost(value: string | null | undefined) {
 export function RunTimeline({
   failure_reason: failureReason,
   partial_reasons: partialReasons = [],
+  partial_summaries: partialSummaries = [],
   retry_count: retryCount,
   status,
   steps,
@@ -61,7 +65,7 @@ export function RunTimeline({
     <section aria-labelledby="run-timeline-heading" className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-semibold" id="run-timeline-heading">
-          Run timeline
+          Scan timeline
         </h2>
         <span
           className={`rounded-full px-3 py-1 text-sm font-medium ${
@@ -78,7 +82,7 @@ export function RunTimeline({
         </span>
       </div>
 
-      <ol aria-label="Run lifecycle" className="space-y-3 border-l-2 border-slate-200 pl-5">
+      <ol aria-label="Scan lifecycle" className="space-y-3 border-l-2 border-slate-200 pl-5">
         {orderedSteps.map((step, index) => (
           <li className="relative" key={`${step.state}-${step.occurred_at}-${index}`}>
             <span
@@ -95,10 +99,10 @@ export function RunTimeline({
 
       {partialReasons.length > 0 ? (
         <div>
-          <h3 className="font-semibold">Partial run reasons</h3>
+          <h3 className="font-semibold">Partial scan reasons</h3>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
-            {partialReasons.map((reason) => (
-              <li key={reason}>{humanize(reason)}</li>
+            {partialReasonLabels(partialReasons, partialSummaries).map((label) => (
+              <li key={label}>{label}</li>
             ))}
           </ul>
         </div>
@@ -107,7 +111,7 @@ export function RunTimeline({
       {failureReason ? (
         <div>
           <h3 className="font-semibold">Failure reason</h3>
-          <p className="mt-2 text-sm text-slate-700">{humanize(failureReason)}</p>
+          <p className="mt-2 text-sm text-slate-700">{failureReason}</p>
         </div>
       ) : null}
 
@@ -124,9 +128,6 @@ export function RunTimeline({
             Output tokens<span>: {knownNumber(usage?.output_tokens)}</span>
           </p>
           <p>
-            Tool calls<span>: {knownNumber(usage?.tool_calls)}</span>
-          </p>
-          <p>
             Latency<span>: {latency}</span>
           </p>
           <p>
@@ -137,4 +138,3 @@ export function RunTimeline({
     </section>
   );
 }
-import { formatUserDateTime } from "@/lib/dates";

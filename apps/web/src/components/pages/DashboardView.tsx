@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { CompetitorFavicon } from "@/components/CompetitorFavicon";
 import { FindingCard } from "@/components/FindingCard";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { apiGetClient } from "@/lib/api";
@@ -16,8 +17,6 @@ import {
   weeklyBriefPageSchema,
   type Run,
 } from "@/lib/schemas";
-
-const COMPETITOR_LIMIT = 10;
 
 function errorText(error: unknown) {
   return error instanceof Error ? error.message : "Something went wrong.";
@@ -59,7 +58,7 @@ export function DashboardView() {
   });
   useEffect(() => {
     if (competitors.data?.items.length === 0) {
-      router.replace("/competitors/new");
+      router.replace("/competitors/new?first=1");
     }
   }, [competitors.data?.items.length, router]);
 
@@ -108,9 +107,6 @@ export function DashboardView() {
   ]
     .sort((left, right) => right.published_at.localeCompare(left.published_at))
     .slice(0, 10);
-  const unhealthyRuns = runPage.items.filter(
-    (run) => run.status === "partial" || run.status === "failed",
-  );
   const latestBrief = briefPage.items[0];
 
   return (
@@ -118,7 +114,7 @@ export function DashboardView() {
       <header className="flex flex-wrap items-end justify-between gap-5">
         <div>
           <p className="eyebrow">Intelligence overview</p>
-          <h1 className="mt-1.5 text-4xl font-semibold">Overview</h1>
+          <h1 className="mt-1.5 text-4xl font-semibold">Dashboard</h1>
           <p className="mt-2 max-w-2xl text-slate-600">
             The signals that matter, without the noise.
           </p>
@@ -134,69 +130,13 @@ export function DashboardView() {
         </Link>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <article className="surface p-4">
-          <p className="text-xs font-medium text-slate-500">Monitoring</p>
-          <div className="mt-2 flex items-end justify-between gap-3">
-            <p className="text-3xl font-semibold tracking-[-0.04em]">{activeCompetitors.length}</p>
-            <span className="mb-1 text-xs text-slate-500">Daily monitors</span>
-          </div>
-        </article>
-        <article className="surface p-4">
-          <p className="text-xs font-medium text-slate-500">Recent important changes</p>
-          <div className="mt-2 flex items-end justify-between gap-3">
-            <p className="text-3xl font-semibold tracking-[-0.04em]">{materialFindings.length}</p>
-            <span className="mb-1 text-xs text-slate-500">Latest view</span>
-          </div>
-        </article>
-        <article className="surface p-4">
-          <p className="text-xs font-medium text-slate-500">Monitoring issues</p>
-          <div className="mt-2 flex items-end justify-between gap-3">
-            <p className="text-3xl font-semibold tracking-[-0.04em]">{unhealthyRuns.length}</p>
-            <span
-              className={`mb-1 text-xs ${unhealthyRuns.length ? "text-amber-700" : "text-slate-500"}`}
-            >
-              {unhealthyRuns.length ? "Needs attention" : "All clear"}
-            </span>
-          </div>
-        </article>
-      </div>
-
-      {unhealthyRuns.length ? (
-        <section
-          aria-labelledby="run-warnings-heading"
-          className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4"
-          role="alert"
-        >
-          <span aria-hidden="true" className="mt-0.5 text-amber-700">
-            ●
-          </span>
-          <div>
-            <h2 className="font-semibold text-amber-950" id="run-warnings-heading">
-              Run health needs attention
-            </h2>
-            <ul className="mt-1.5 space-y-1 text-sm text-amber-900">
-              {unhealthyRuns.map((run) => (
-                <li key={run.id}>
-                  <Link className="font-semibold capitalize underline" href={`/runs/${run.id}`}>
-                    {run.status} run
-                  </Link>
-                  {run.failure_summary ? `: ${run.failure_summary}` : null}
-                  {run.partial_reasons.length ? `: ${run.partial_reasons.join("; ")}` : null}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
-      ) : null}
-
       <div className="grid items-start gap-7 lg:grid-cols-[minmax(0,1.7fr)_minmax(16rem,0.8fr)]">
         <section aria-labelledby="latest-findings-heading" className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="eyebrow">Signal feed</p>
               <h2 className="mt-1 text-xl font-semibold" id="latest-findings-heading">
-                Latest findings
+                Latest updates
               </h2>
             </div>
             <Link className="section-link" href="/findings">
@@ -210,7 +150,7 @@ export function DashboardView() {
               ))}
             </div>
           ) : (
-            <p className="empty-state p-6">No material findings yet.</p>
+            <p className="empty-state p-6">No material updates yet.</p>
           )}
         </section>
 
@@ -221,7 +161,7 @@ export function DashboardView() {
                 Watching
               </h2>
               <Link className="section-link" href="/competitors">
-                Manage
+                Manage <span aria-hidden="true">→</span>
               </Link>
             </div>
             {activeCompetitors.length ? (
@@ -229,16 +169,26 @@ export function DashboardView() {
                 {activeCompetitors.map((competitor) => {
                   const latestRun = latestRunFor(competitor.id, runPage.items);
                   return (
-                    <li className="px-5 py-3.5" key={competitor.id}>
+                    <li
+                      className="card-target group px-5 py-3.5 transition-colors hover:bg-[var(--color-accent-soft)]/40"
+                      key={competitor.id}
+                    >
                       <div className="flex items-center justify-between gap-3">
-                        <Link
-                          className="min-w-0 truncate text-sm font-semibold hover:text-[#b93e42]"
-                          href={`/competitors/${competitor.id}`}
-                        >
-                          {competitor.name}
-                        </Link>
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <CompetitorFavicon
+                            domain={competitor.primary_domain}
+                            name={competitor.name}
+                            size="sm"
+                          />
+                          <Link
+                            className="card-link min-w-0 truncate text-sm font-semibold transition-colors group-hover:text-[var(--color-accent-strong)]"
+                            href={`/competitors/${competitor.id}`}
+                          >
+                            {competitor.name}
+                          </Link>
+                        </div>
                         <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] capitalize text-slate-500">
-                          <span className="size-1.5 rounded-full bg-emerald-500" />
+                          <span className="size-1.5 rounded-full bg-[var(--color-success)]" />
                           {latestRun?.status ?? "Not run yet"}
                         </span>
                       </div>
@@ -249,40 +199,23 @@ export function DashboardView() {
             ) : (
               <p className="p-5 text-sm text-slate-600">No active competitors yet.</p>
             )}
-            <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-4">
-              <div className="flex items-center justify-between gap-3 text-xs text-slate-500">
-                <span>Monitoring capacity</span>
-                <span>
-                  {competitorPage.items.length} of {COMPETITOR_LIMIT}
-                </span>
-              </div>
-              <progress
-                aria-label="Competitor slots used"
-                className="mt-2 w-full"
-                max={COMPETITOR_LIMIT}
-                value={competitorPage.items.length}
-              />
-              <p className="sr-only">
-                {competitorPage.items.length} of {COMPETITOR_LIMIT} competitor slots used
-              </p>
-            </div>
           </section>
 
           <section aria-labelledby="latest-brief-heading" className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold" id="latest-brief-heading">
-                Weekly brief
+                Weekly Digest
               </h2>
               <Link className="section-link" href="/briefs">
-                Archive
+                Archive <span aria-hidden="true">→</span>
               </Link>
             </div>
             {latestBrief ? (
-              <article className="surface p-5">
+              <article className="surface surface-interactive card-target group p-5">
                 <p className="eyebrow">Latest edition</p>
                 <h3 className="mt-2 leading-snug">
                   <Link
-                    className="font-semibold hover:text-[#b93e42]"
+                    className="card-link font-semibold transition-colors group-hover:text-[var(--color-accent-strong)]"
                     href={`/briefs/${latestBrief.id}`}
                   >
                     {latestBrief.title}
@@ -291,9 +224,18 @@ export function DashboardView() {
                 <p className="mt-2 line-clamp-4 text-sm leading-6 text-slate-600">
                   {latestBrief.executive_summary}
                 </p>
+                <p className="mt-3 text-xs font-semibold text-[var(--color-accent-strong)]">
+                  Read the digest
+                  <span
+                    aria-hidden="true"
+                    className="ml-1 inline-block transition-transform group-hover:translate-x-0.5"
+                  >
+                    →
+                  </span>
+                </p>
               </article>
             ) : (
-              <p className="empty-state p-5 text-sm">No weekly briefs yet.</p>
+              <p className="empty-state p-5 text-sm">No Weekly Digest yet.</p>
             )}
           </section>
         </div>

@@ -67,23 +67,30 @@ _OUTPUT_KEYS_BY_TASK_KIND = {
 _RUN_SUMMARIES = {
     "competitor_inactive": "Competitor monitoring is not active.",
     "daily_cost_limit": "The daily usage limit was reached.",
-    "main_input_token_limit": "The run input exceeded its configured limit.",
-    "no_valid_evidence": "No valid evidence was available for this run.",
+    "main_input_token_limit": "The scan input exceeded its configured limit.",
+    "no_valid_evidence": "No valid evidence was available for this scan.",
     "otari_tool_iteration_limit": "Source discovery exhausted its web search budget.",
-    "planning_timeout": "Run planning timed out.",
-    "publication_failed": "Validated findings could not be published.",
-    "run_cost_limit": "The run usage limit was reached.",
-    "synthesis_timeout": "Finding synthesis timed out.",
+    "planning_timeout": "Scan planning timed out.",
+    "publication_failed": "Validated updates could not be published.",
+    "run_cost_limit": "The scan usage limit was reached.",
+    "synthesis_timeout": "Update synthesis timed out.",
+}
+_PARTIAL_SUMMARIES = {
+    "child_task_failed": "Some research tasks could not complete.",
+    "cost_ceiling_reached": "The scan stopped before exceeding a usage limit.",
+    "insufficient_sources": "No usable sources were discovered.",
+    "run_cost_limit": "The scan usage limit was reached.",
 }
 _TASK_SUMMARIES = {
     "child_input_token_limit": "The task input exceeded its configured limit.",
+    "child_task_failed": "The research task could not complete.",
     "child_timeout": "The research task timed out.",
     "cost_ceiling_reached": "The task was cancelled before exceeding a usage limit.",
     "main_input_token_limit": "The task input exceeded its configured limit.",
     "otari_tool_iteration_limit": "The task exhausted its web search budget.",
-    "planning_timeout": "Run planning timed out.",
+    "planning_timeout": "Scan planning timed out.",
     "run_cost_limit": "The task was cancelled after reaching a usage limit.",
-    "synthesis_timeout": "Finding synthesis timed out.",
+    "synthesis_timeout": "Update synthesis timed out.",
 }
 
 
@@ -210,6 +217,9 @@ def run_read(
     competitor_name: str | None = None,
     finding_count: int = 0,
 ) -> RunRead:
+    partial_reasons = [
+        code for item in run.partial_reasons if (code := _safe_code(item)) is not None
+    ]
     return RunRead(
         id=run.id,
         competitor_id=run.competitor_id,
@@ -222,8 +232,9 @@ def run_read(
         completed_at=run.completed_at,
         failure_code=_safe_code(run.failure_code),
         failure_summary=_RUN_SUMMARIES.get(_safe_code(run.failure_code) or ""),
-        partial_reasons=[
-            code for item in run.partial_reasons if (code := _safe_code(item)) is not None
+        partial_reasons=partial_reasons,
+        partial_summaries=[
+            summary for code in partial_reasons if (summary := _PARTIAL_SUMMARIES.get(code))
         ],
         input_tokens=run.input_tokens,
         output_tokens=run.output_tokens,
@@ -385,6 +396,7 @@ async def list_runs(
             Finding.originating_scout_run_id.label("run_id"),
             func.count(Finding.id).label("finding_count"),
         )
+        .where(Finding.user_id == user_id)
         .group_by(Finding.originating_scout_run_id)
         .subquery()
     )
@@ -443,7 +455,10 @@ async def run_summary(
 ) -> RunRead | None:
     finding_count = (
         select(func.count(Finding.id))
-        .where(Finding.originating_scout_run_id == ScoutRun.id)
+        .where(
+            Finding.originating_scout_run_id == ScoutRun.id,
+            Finding.user_id == user_id,
+        )
         .correlate(ScoutRun)
         .scalar_subquery()
     )

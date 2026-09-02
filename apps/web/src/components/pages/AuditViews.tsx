@@ -76,7 +76,7 @@ export function FindingsListView({ initialFilters }: { initialFilters: FindingFi
   const me = useQuery(meQueryOptions);
   const competitors = useQuery({
     enabled: filtersOpen,
-    queryKey: ["competitors", "finding-filter"],
+    queryKey: ["competitors", "update-filter"],
     queryFn: () => apiGetClient("/api/v1/competitors?limit=100", competitorPageSchema),
   });
   const suffix = queryString(initialFilters, me.data?.timezone ?? "UTC");
@@ -90,9 +90,9 @@ export function FindingsListView({ initialFilters }: { initialFilters: FindingFi
     <section className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="eyebrow">Signal archive</p>
-          <h1 className="mt-1 text-4xl font-semibold">Findings</h1>
-          <p className="mt-2 text-slate-600">Evidence-backed competitive changes.</p>
+          <p className="eyebrow">Competitor activity</p>
+          <h1 className="mt-1 text-4xl font-semibold">Updates</h1>
+          <p className="mt-2 text-slate-600">Every change we spotted, with the source.</p>
         </div>
         <Button
           aria-expanded={filtersOpen}
@@ -110,7 +110,11 @@ export function FindingsListView({ initialFilters }: { initialFilters: FindingFi
               className="rounded-full bg-[var(--color-accent-soft)] px-2.5 py-1 text-xs font-medium text-[var(--color-accent-strong)]"
               key={key}
             >
-              {key.replaceAll("_", " ")}: {value}
+              {key === "competitor_id" ? "competitor" : key.replaceAll("_", " ")}:{" "}
+              {key === "competitor_id"
+                ? (competitors.data?.items.find((competitor) => competitor.id === value)?.name ??
+                  "Selected competitor")
+                : value}
             </span>
           ))}
           <Link className="section-link ml-1" href="/findings">
@@ -123,7 +127,7 @@ export function FindingsListView({ initialFilters }: { initialFilters: FindingFi
           <label className="text-sm font-medium">
             Competitor
             <select
-              className="mt-1 block min-h-10 w-full rounded-xl border px-3 py-2"
+              className="select-control mt-1"
               defaultValue={initialFilters.competitor_id ?? ""}
               name="competitor_id"
             >
@@ -138,7 +142,7 @@ export function FindingsListView({ initialFilters }: { initialFilters: FindingFi
           <label className="text-sm font-medium">
             Category
             <select
-              className="mt-1 block min-h-10 w-full rounded-xl border px-3 py-2"
+              className="select-control mt-1"
               defaultValue={initialFilters.category ?? ""}
               name="category"
             >
@@ -152,7 +156,7 @@ export function FindingsListView({ initialFilters }: { initialFilters: FindingFi
           <label className="text-sm font-medium">
             Significance
             <select
-              className="mt-1 block min-h-10 w-full rounded-xl border px-3 py-2"
+              className="select-control mt-1"
               defaultValue={initialFilters.significance ?? ""}
               name="significance"
             >
@@ -201,10 +205,10 @@ export function FindingsListView({ initialFilters }: { initialFilters: FindingFi
           </Button>
         </form>
       ) : null}
-      {me.isPending || query.isPending ? <LoadingState label="Loading findings…" rows={4} /> : null}
-      {me.isError || query.isError ? (
+      {me.isPending || query.isPending ? <LoadingState label="Loading updates…" rows={4} /> : null}
+      {me.isError || query.isError || competitors.isError ? (
         <p className="text-red-700" role="alert">
-          {errorText(me.error ?? query.error)}
+          {errorText(me.error ?? query.error ?? competitors.error)}
         </p>
       ) : null}
       {query.data?.items.length === 0 ? (
@@ -224,7 +228,6 @@ export function FindingsListView({ initialFilters }: { initialFilters: FindingFi
 }
 
 export function FindingDetailView({ findingId }: { findingId: string }) {
-  const me = useQuery(meQueryOptions);
   const finding = useQuery({
     queryKey: ["finding", findingId],
     queryFn: () => apiGetClient(`/api/v1/findings/${findingId}`, findingSchema),
@@ -234,13 +237,13 @@ export function FindingDetailView({ findingId }: { findingId: string }) {
     queryFn: () =>
       apiGetClient(`/api/v1/findings/${findingId}/evidence`, findingEvidencePageSchema),
   });
-  if (me.isPending || finding.isPending || evidence.isPending) {
+  if (finding.isPending || evidence.isPending) {
     return <LoadingState label="Loading finding…" rows={4} />;
   }
-  if (me.isError || finding.isError || evidence.isError)
+  if (finding.isError || evidence.isError)
     return (
       <p className="text-red-700" role="alert">
-        {errorText(me.error ?? finding.error ?? evidence.error)}
+        {errorText(finding.error ?? evidence.error)}
       </p>
     );
   return (
@@ -266,11 +269,11 @@ export function FindingDetailView({ findingId }: { findingId: string }) {
           className="section-link mt-4 inline-block"
           href={`/runs/${finding.data.originating_scout_run_id}`}
         >
-          Originating run
+          Originating scan
         </Link>
       </section>
       {evidence.data.items.length ? (
-        <EvidenceList evidence={evidence.data.items} timeZone={me.data.timezone} />
+        <EvidenceList evidence={evidence.data.items} />
       ) : (
         <p>No evidence is available.</p>
       )}
@@ -289,18 +292,21 @@ export function RunsListView({ competitorId }: { competitorId?: string } = {}) {
   return (
     <section className="space-y-6">
       <div>
-        <p className="eyebrow">Operations</p>
-        <h1 className="mt-1 text-4xl font-semibold">Runs</h1>
-        <p className="mt-2 text-slate-600">Scout execution history and audit status.</p>
+        <p className="eyebrow">Advanced</p>
+        <h1 className="mt-1 text-4xl font-semibold">Scan activity</h1>
+        <p className="mt-2 text-slate-600">
+          Execution history, task detail, and audit status for every scan. Useful for
+          troubleshooting when an update looks missing or a scan reports a problem.
+        </p>
       </div>
-      {me.isPending || query.isPending ? <LoadingState label="Loading runs…" rows={4} /> : null}
+      {me.isPending || query.isPending ? <LoadingState label="Loading scans…" rows={4} /> : null}
       {me.isError || query.isError ? (
         <p className="text-red-700" role="alert">
           {errorText(me.error ?? query.error)}
         </p>
       ) : null}
       {query.data?.items.length === 0 ? (
-        <p className="empty-state p-8 text-center">No runs yet.</p>
+        <p className="empty-state p-8 text-center">No scans yet.</p>
       ) : null}
       {query.data?.items.length ? (
         <ul className="space-y-3">
@@ -317,7 +323,7 @@ export function RunsListView({ competitorId }: { competitorId?: string } = {}) {
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
                 <span>{run.competitor_name ?? "Account-wide"}</span>
                 <span>
-                  {run.finding_count} finding{run.finding_count === 1 ? "" : "s"}
+                  {run.finding_count} update{run.finding_count === 1 ? "" : "s"}
                 </span>
                 <time dateTime={run.created_at}>
                   {formatUserDateTime(run.created_at, me.data?.timezone ?? "UTC")}
@@ -354,7 +360,7 @@ export function RunDetailView({ runId }: { runId: string }) {
     queryFn: () => apiGetClient(`/api/v1/runs/${runId}/usage`, runUsageSchema),
   });
   if (me.isPending || run.isPending || tasks.isPending || usage.isPending) {
-    return <LoadingState label="Loading run…" rows={4} />;
+    return <LoadingState label="Loading scan…" rows={4} />;
   }
   if (me.isError || run.isError || tasks.isError || usage.isError)
     return (
@@ -369,57 +375,51 @@ export function RunDetailView({ runId }: { runId: string }) {
   return (
     <article className="max-w-4xl space-y-8">
       <RunOutcomeSummary run={run.data} timeZone={me.data.timezone} />
-      <details className="surface p-5">
-        <summary className="cursor-pointer font-semibold">Advanced audit details</summary>
-        <div className="mt-6 space-y-8">
-          <RunTimeline
-            failure_reason={run.data.failure_summary}
-            partial_reasons={[]}
-            retry_count={retries}
-            status={run.data.status}
-            steps={lifecycle(run.data)}
-            timeZone={me.data.timezone}
-            usage={usage.data}
-          />
-          <section aria-labelledby="tasks-heading" className="space-y-3">
-            <h2 className="text-xl font-semibold" id="tasks-heading">
-              Agent tasks
-            </h2>
-            {tasks.data.items.length === 0 ? (
-              <p>No task records are available.</p>
-            ) : (
-              <ul className="space-y-3">
-                {tasks.data.items.map((task) => (
-                  <li className="surface p-5" id={`task-${task.id}`} key={task.id}>
-                    <div className="flex flex-wrap justify-between gap-2">
-                      <h3 className="font-semibold">{task.objective}</h3>
-                      <span className="text-sm capitalize text-slate-600">{task.status}</span>
-                    </div>
-                    <p className="mt-2 text-sm text-slate-600">
-                      {task.role.replaceAll("_", " ")} · Attempts: {task.attempt_count}
-                    </p>
-                    {task.source_scope.length ? (
-                      <ul className="mt-3 list-disc pl-5 text-sm text-slate-600">
-                        {task.source_scope.map((source) => (
-                          <li key={source}>{source}</li>
-                        ))}
-                      </ul>
-                    ) : null}
-                    {task.validated_output ? (
-                      <pre className="mt-3 overflow-auto rounded-lg bg-slate-100 p-3 text-xs">
-                        {JSON.stringify(task.validated_output, null, 2)}
-                      </pre>
-                    ) : null}
-                    {task.error_summary ? (
-                      <p className="mt-3 text-sm text-red-700">{task.error_summary}</p>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </div>
-      </details>
+      <RunTimeline
+        failure_reason={run.data.failure_summary}
+        retry_count={retries}
+        status={run.data.status}
+        steps={lifecycle(run.data)}
+        timeZone={me.data.timezone}
+        usage={usage.data}
+      />
+      <section aria-labelledby="tasks-heading" className="space-y-3">
+        <h2 className="text-xl font-semibold" id="tasks-heading">
+          Agent tasks
+        </h2>
+        {tasks.data.items.length === 0 ? (
+          <p>No task records are available.</p>
+        ) : (
+          <ul className="space-y-3">
+            {tasks.data.items.map((task) => (
+              <li className="surface p-5" id={`task-${task.id}`} key={task.id}>
+                <div className="flex flex-wrap justify-between gap-2">
+                  <h3 className="font-semibold">{task.objective}</h3>
+                  <span className="text-sm capitalize text-slate-600">{task.status}</span>
+                </div>
+                <p className="mt-2 text-sm text-slate-600">
+                  {task.role.replaceAll("_", " ")} · Attempts: {task.attempt_count}
+                </p>
+                {task.source_scope.length ? (
+                  <ul className="mt-3 list-disc pl-5 text-sm text-slate-600">
+                    {task.source_scope.map((source) => (
+                      <li key={source}>{source}</li>
+                    ))}
+                  </ul>
+                ) : null}
+                {task.validated_output ? (
+                  <pre className="mt-3 overflow-auto rounded-lg bg-slate-100 p-3 text-xs">
+                    {JSON.stringify(task.validated_output, null, 2)}
+                  </pre>
+                ) : null}
+                {task.error_summary ? (
+                  <p className="mt-3 text-sm text-red-700">{task.error_summary}</p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </article>
   );
 }

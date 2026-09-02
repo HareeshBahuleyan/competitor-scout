@@ -178,6 +178,7 @@ export const runSchema = z.object({
   failure_code: z.string().nullable(),
   failure_summary: z.string().nullable(),
   partial_reasons: z.array(z.string()),
+  partial_summaries: z.array(z.string()),
   input_tokens: z.number().int().nonnegative(),
   output_tokens: z.number().int().nonnegative(),
   tool_calls: z.number().int().nonnegative().nullable(),
@@ -239,7 +240,7 @@ export const briefSectionSchema = z.object({
   references: z.array(briefFindingReferenceSchema).min(1).max(30),
 });
 
-export const EMPTY_BRIEF_TITLE = "Weekly brief: no material changes";
+export const EMPTY_BRIEF_TITLE = "Weekly Digest: no material changes";
 export const EMPTY_BRIEF_EXECUTIVE_SUMMARY =
   "No accepted material changes were published during this weekly period.";
 
@@ -285,7 +286,6 @@ export const usageSummaryRowSchema = z.object({
   model: z.string().min(1),
   input_tokens: z.number().int().nonnegative(),
   output_tokens: z.number().int().nonnegative(),
-  tool_calls: z.number().int().nonnegative().nullable(),
   settled_cost_usd: nullableMoneySchema,
 });
 

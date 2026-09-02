@@ -20,10 +20,26 @@ const finding: Finding = {
 };
 
 describe("FindingCard", () => {
+  it("exposes one detail link and a visible affordance for the clickable card", () => {
+    render(<FindingCard finding={finding} />);
+
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAccessibleName(finding.title);
+    expect(links[0]).toHaveAttribute("href", `/findings/${finding.id}`);
+    expect(screen.getByText("View update")).toBeInTheDocument();
+  });
+
   it("uses the danger indicator for critical findings", () => {
     render(<FindingCard finding={finding} />);
 
     const indicator = screen.getByRole("article").querySelector('[aria-hidden="true"]');
     expect(indicator).toHaveClass("bg-[var(--color-danger)]");
+  });
+
+  it("renders the publication time in the account timezone", () => {
+    render(<FindingCard finding={finding} timeZone="Europe/Berlin" />);
+
+    expect(screen.getByText(/11:00/)).toBeInTheDocument();
   });
 });

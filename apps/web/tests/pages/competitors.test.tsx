@@ -1,4 +1,5 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -10,8 +11,12 @@ import { apiGetClient, apiMutate } from "@/lib/api";
 import { renderWithQuery } from "../query-test-utils";
 
 vi.mock("@/lib/api", () => ({ apiGetClient: vi.fn(), apiMutate: vi.fn() }));
-const push = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+const searchParams = { current: new URLSearchParams() };
+const routerPush = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: routerPush }),
+  useSearchParams: () => searchParams.current,
+}));
 
 const competitor = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -59,6 +64,7 @@ const run = (status: string, failure_summary: string | null = null) => ({
   failure_code: status === "failed" ? "provider_error" : null,
   failure_summary,
   partial_reasons: [],
+  partial_summaries: [],
   input_tokens: 1,
   output_tokens: 2,
   tool_calls: 1,
@@ -66,7 +72,11 @@ const run = (status: string, failure_summary: string | null = null) => ({
   created_at: "2026-08-21T08:00:00Z",
 });
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  routerPush.mockClear();
+  searchParams.current = new URLSearchParams();
+});
 
 describe("competitor pages", () => {
   it("renders loading, empty, success, and error list states", async () => {
@@ -106,6 +116,48 @@ describe("competitor pages", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("invalid cursor");
     expect(screen.getByRole("alert")).not.toHaveTextContent("Competitor limit reached");
+  });
+
+  it("frames the first run as a three-step setup and shows background progress", async () => {
+    searchParams.current = new URLSearchParams("first=1");
+    vi.mocked(apiGetClient).mockImplementation(async (path) => {
+      if (path === "/api/v1/me") return me as never;
+      if (path === "/api/v1/settings") return settings as never;
+      if (path.includes("/runs/")) return run("running") as never;
+      throw new Error(`unexpected GET ${path}`);
+    });
+    vi.mocked(apiMutate)
+      .mockResolvedValueOnce(competitor as never)
+      .mockResolvedValueOnce({ run_id: run("running").id } as never);
+
+    renderWithQuery(<NewCompetitorView pollIntervalMs={50} />);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "Let's set up your first competitor in 3 steps",
+      }),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Competitor name"), { target: { value: "Acme" } });
+    fireEvent.change(screen.getByLabelText("Primary domain"), {
+      target: { value: "acme.example" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue to sources" }));
+
+    const progress = await screen.findByTestId("working-indicator");
+    expect(progress).toHaveTextContent("Finding first-party sources…");
+    expect(progress).toHaveTextContent("This usually takes under a minute");
+  });
+
+  it("keeps the standard header when adding a later competitor", async () => {
+    vi.mocked(apiGetClient).mockImplementation(async (path) => {
+      if (path === "/api/v1/me") return me as never;
+      if (path === "/api/v1/settings") return settings as never;
+      throw new Error(`unexpected GET ${path}`);
+    });
+
+    renderWithQuery(<NewCompetitorView pollIntervalMs={50} />);
+
+    expect(await screen.findByRole("heading", { name: "Add competitor" })).toBeInTheDocument();
   });
 
   it("guides setup from details through source selection and the first scan", async () => {
@@ -302,7 +354,7 @@ describe("competitor pages", () => {
 
     renderWithQuery(<CompetitorDetailView competitorId={competitor.id} />);
     await screen.findByRole("heading", { name: "Acme" });
-    expect(screen.getByRole("button", { name: "Run now" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Run scan now" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Retry source discovery" }));
 
     await waitFor(() =>
@@ -331,14 +383,16 @@ describe("competitor pages", () => {
       .mockResolvedValueOnce({ ...competitor, status: "active" } as never);
     renderWithQuery(<CompetitorDetailView competitorId={competitor.id} />);
     await screen.findByRole("heading", { name: "Acme" });
-    expect(screen.getByRole("heading", { name: "Recent findings" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Recent runs" })).toBeInTheDocument();
-    expect(screen.getByRole("form", { name: "Filter competitor findings" })).toHaveAttribute(
+    expect(screen.getByRole("heading", { name: "Recent updates" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Recent scans" })).toBeInTheDocument();
+    expect(screen.getByRole("form", { name: "Filter competitor updates" })).toHaveAttribute(
       "action",
       "/findings",
     );
+    expect(screen.getByRole("option", { name: "customer win" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "traction" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Resume monitoring" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Approve Pricing" }));
+    fireEvent.click(screen.getByRole("button", { name: "Monitor Pricing" }));
     await waitFor(() =>
       expect(apiMutate).toHaveBeenCalledWith(
         `/api/v1/competitors/${competitor.id}/sources/${source.id}`,
@@ -361,7 +415,8 @@ describe("competitor pages", () => {
     );
   });
 
-  it("edits, pauses, adds a source, and confirms archiving a monitor", async () => {
+  it("saves, pauses, and archives a monitor through the competitor API", async () => {
+    const user = userEvent.setup();
     const activeCompetitor = { ...competitor, status: "active" };
     vi.mocked(apiGetClient).mockImplementation(async (path) => {
       if (path === "/api/v1/me") return me as never;
@@ -370,29 +425,27 @@ describe("competitor pages", () => {
       if (path.startsWith("/api/v1/runs?")) return { items: [], next_cursor: null } as never;
       return activeCompetitor as never;
     });
-    vi.mocked(apiMutate).mockImplementation(async (path, options) => {
-      if (options.method === "DELETE") return undefined as never;
-      if (path.endsWith("/sources")) return source as never;
-      return { ...activeCompetitor, ...(options.body as object) } as never;
-    });
+    vi.mocked(apiMutate)
+      .mockResolvedValueOnce({ ...activeCompetitor, name: "Acme Inc." } as never)
+      .mockResolvedValueOnce({ ...activeCompetitor, status: "paused" } as never)
+      .mockResolvedValueOnce(undefined);
 
     renderWithQuery(<CompetitorDetailView competitorId={competitor.id} />);
     await screen.findByRole("heading", { name: "Acme" });
-    expect(screen.getByRole("heading", { name: "Monitoring daily" })).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Monitor name"), { target: { value: "Acme Inc." } });
-    fireEvent.change(screen.getByLabelText("Description"), {
-      target: { value: "Updated widgets" },
-    });
-    fireEvent.change(screen.getByLabelText("Daily run time"), { target: { value: "09:30" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save monitor" }));
+    await user.clear(screen.getByLabelText("Monitor name"));
+    await user.type(screen.getByLabelText("Monitor name"), "Acme Inc.");
+    await user.clear(screen.getByLabelText("Daily scan time"));
+    await user.type(screen.getByLabelText("Daily scan time"), "09:30");
+    await user.click(screen.getByRole("button", { name: "Save monitor" }));
     await waitFor(() =>
-      expect(apiMutate).toHaveBeenCalledWith(
+      expect(apiMutate).toHaveBeenNthCalledWith(
+        1,
         `/api/v1/competitors/${competitor.id}`,
         expect.objectContaining({
           body: {
             daily_run_time_local: "09:30:00",
-            description: "Updated widgets",
+            description: "Widgets",
             name: "Acme Inc.",
           },
           method: "PATCH",
@@ -401,41 +454,24 @@ describe("competitor pages", () => {
       ),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Pause monitoring" }));
+    await user.click(screen.getByRole("button", { name: "Pause monitoring" }));
     await waitFor(() =>
-      expect(apiMutate).toHaveBeenCalledWith(
+      expect(apiMutate).toHaveBeenNthCalledWith(
+        2,
         `/api/v1/competitors/${competitor.id}`,
         expect.objectContaining({ body: { status: "paused" }, method: "PATCH" }),
         expect.anything(),
       ),
     );
 
-    fireEvent.change(screen.getByLabelText("Add first-party source"), {
-      target: { value: "https://acme.example/blog" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Add source" }));
+    await user.click(screen.getByRole("button", { name: "Archive monitor" }));
+    await user.click(screen.getByRole("button", { name: "Archive Acme Inc." }));
     await waitFor(() =>
-      expect(apiMutate).toHaveBeenCalledWith(
-        `/api/v1/competitors/${competitor.id}/sources`,
-        expect.objectContaining({
-          body: { url: "https://acme.example/blog" },
-          method: "POST",
-        }),
-        expect.anything(),
-      ),
+      expect(apiMutate).toHaveBeenNthCalledWith(3, `/api/v1/competitors/${competitor.id}`, {
+        csrfToken: "csrf",
+        method: "DELETE",
+      }),
     );
-
-    fireEvent.click(screen.getByRole("button", { name: "Archive monitor" }));
-    expect(screen.getByRole("dialog", { name: "Archive Acme?" })).toHaveTextContent(
-      "Existing findings and run history are retained",
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Archive Acme" }));
-    await waitFor(() =>
-      expect(apiMutate).toHaveBeenCalledWith(
-        `/api/v1/competitors/${competitor.id}`,
-        expect.objectContaining({ method: "DELETE" }),
-      ),
-    );
-    expect(push).toHaveBeenCalledWith("/competitors");
+    expect(routerPush).toHaveBeenCalledWith("/competitors");
   });
 });

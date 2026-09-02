@@ -525,6 +525,7 @@ async def test_run_read_apis_are_filtered_cursor_paginated_and_safe(run_store) -
         "failure_code",
         "failure_summary",
         "partial_reasons",
+        "partial_summaries",
         "input_tokens",
         "output_tokens",
         "tool_calls",
@@ -537,6 +538,7 @@ async def test_run_read_apis_are_filtered_cursor_paginated_and_safe(run_store) -
     assert filtered.json()["items"][0]["competitor_name"] == detail.json()["competitor_name"]
     assert filtered.json()["items"][0]["finding_count"] == 1
     assert detail.json()["partial_reasons"] == ["child_task_failed"]
+    assert detail.json()["partial_summaries"] == ["Some research tasks could not complete."]
     assert detail.json()["failure_summary"] is None
     assert tasks.status_code == 200 and tasks.json()["next_cursor"] is not None
     assert tasks_next.status_code == 200

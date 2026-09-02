@@ -19,14 +19,13 @@ describe("RunTimeline", () => {
         usage={{
           input_tokens: 120,
           output_tokens: 45,
-          tool_calls: 2,
           latency_ms: 1530,
           settled_cost_usd: "0.42",
         }}
       />,
     );
 
-    const lifecycle = within(screen.getByRole("list", { name: "Run lifecycle" }));
+    const lifecycle = within(screen.getByRole("list", { name: "Scan lifecycle" }));
     const steps = lifecycle.getAllByRole("listitem");
     expect(steps.map((step) => step.textContent)).toEqual([
       expect.stringContaining("Queued"),
@@ -40,15 +39,29 @@ describe("RunTimeline", () => {
     expect(screen.getByText("Retries")).toHaveTextContent("1");
     expect(screen.getByText("Input tokens")).toHaveTextContent("120");
     expect(screen.getByText("Output tokens")).toHaveTextContent("45");
-    expect(screen.getByText("Tool calls")).toHaveTextContent("2");
     expect(screen.getByText("Latency")).toHaveTextContent("1,530 ms");
     expect(screen.getByText("Settled cost")).toHaveTextContent("$0.42");
+  });
+
+  it("prefers the backend summary over the raw partial reason code", () => {
+    render(
+      <RunTimeline
+        partial_reasons={["child_task_failed"]}
+        partial_summaries={["Some research tasks could not complete."]}
+        retry_count={0}
+        status="partial"
+        steps={outOfOrderSteps}
+      />,
+    );
+
+    expect(screen.getByText("Some research tasks could not complete.")).toBeVisible();
+    expect(screen.queryByText("Child task failed")).not.toBeInTheDocument();
   });
 
   it("shows a failed reason and unknown usage without inventing totals", () => {
     render(
       <RunTimeline
-        failure_reason="otari_authentication_error"
+        failure_reason="Authentication failed."
         retry_count={0}
         status="failed"
         steps={outOfOrderSteps.slice(0, 1)}
@@ -56,10 +69,9 @@ describe("RunTimeline", () => {
     );
 
     expect(screen.getByText("Failed")).toBeVisible();
-    expect(screen.getByText("Otari authentication error")).toBeVisible();
+    expect(screen.getByText("Authentication failed.")).toBeVisible();
     expect(screen.getByText("Input tokens")).toHaveTextContent("Unknown");
     expect(screen.getByText("Output tokens")).toHaveTextContent("Unknown");
-    expect(screen.getByText("Tool calls")).toHaveTextContent("Unknown");
     expect(screen.getByText("Latency")).toHaveTextContent("Unknown");
     expect(screen.getByText("Settled cost")).toHaveTextContent("Unknown");
   });

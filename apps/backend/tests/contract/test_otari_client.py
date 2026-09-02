@@ -1,18 +1,19 @@
 import json
+from collections.abc import Callable
 from decimal import Decimal
 from pathlib import Path
 
 import httpx
 import pytest
 
-from competitor_scout.agents.client import OtariClient, OtariError
+from competitor_scout.agents.client import OtariClient, OtariError, OtariMetadata
 from competitor_scout.agents.contracts import ScoutPlan
 from competitor_scout.config import Settings
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "otari" / "chat_completion.json"
 
 
-def settings(*, ai_token: str = "hosted-ai-token") -> Settings:
+def settings(*, ai_token: str = "hosted-ai-token", cost_lookup_attempts: int = 3) -> Settings:
     return Settings(
         environment="test",
         database_url="postgresql+asyncpg://test:test@localhost/test",
@@ -23,6 +24,8 @@ def settings(*, ai_token: str = "hosted-ai-token") -> Settings:
         google_client_secret="google-secret",
         otari_base_url="https://otari.invalid",
         otari_ai_token=ai_token,
+        otari_cost_lookup_attempts=cost_lookup_attempts,
+        otari_cost_lookup_delay_seconds=0.01,
     )
 
 
@@ -317,3 +320,159 @@ async def test_web_search_defaults_to_two_tool_iterations() -> None:
             deadline_seconds=5,
             enable_web_search=True,
         )
+
+
+def completion_without_cost() -> bytes:
+    document = json.loads(FIXTURE.read_text())
+    document["usage"] = {
+        "prompt_tokens": 101,
+        "completion_tokens": 37,
+        "total_tokens": 138,
+    }
+    return json.dumps(document).encode()
+
+
+def request_cost_document(
+    *,
+    cost_usd: str = "0.004210",
+    usage_status: str = "reported",
+    pricing_source: str | None = "genai_prices",
+) -> dict[str, object]:
+    return {
+        "cost_usd": cost_usd,
+        "currency": "USD",
+        "request_id": "req_settle",
+        "status": "completed",
+        "outcome": "success",
+        "usage_status": usage_status,
+        "pricing": {"source": pricing_source, "reference": "openai:model", "version": "0.1.1"},
+    }
+
+
+async def completion_with_cost_lookup(
+    lookup: Callable[[int], httpx.Response],
+    *,
+    settings_override: Settings | None = None,
+) -> tuple[OtariMetadata, list[str]]:
+    lookups: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/chat/completions":
+            return httpx.Response(
+                200,
+                content=completion_without_cost(),
+                headers={"X-Otari-Request-ID": "req_settle"},
+            )
+        lookups.append(request.url.path)
+        assert request.headers["authorization"] == "Bearer hosted-ai-token"
+        return lookup(len(lookups))
+
+    async with OtariClient(
+        settings_override or settings(),
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        _result, metadata = await client.structured_completion(
+            model="competitor-scout-main",
+            messages=[{"role": "user", "content": "Plan."}],
+            output_type=ScoutPlan,
+            session_label="run:settlement",
+            max_completion_tokens=100,
+            deadline_seconds=5,
+        )
+
+    return metadata, lookups
+
+
+async def test_settled_cost_is_looked_up_when_the_response_omits_it() -> None:
+    metadata, lookups = await completion_with_cost_lookup(
+        lambda _attempt: httpx.Response(200, json=request_cost_document())
+    )
+
+    assert lookups == ["/api/v1/request-costs/req_settle"]
+    assert metadata.usage.cost_usd == Decimal("0.004210")
+    assert metadata.usage.pricing_source == "genai_prices"
+    assert metadata.usage.input_tokens == 101
+    assert metadata.usage.output_tokens == 37
+
+
+async def test_pending_settlement_is_retried_until_it_completes() -> None:
+    def lookup(attempt: int) -> httpx.Response:
+        if attempt == 1:
+            return httpx.Response(202, json={"status": "pending"})
+        return httpx.Response(200, json=request_cost_document(cost_usd="0.000110"))
+
+    metadata, lookups = await completion_with_cost_lookup(lookup)
+
+    assert len(lookups) == 2
+    assert metadata.usage.cost_usd == Decimal("0.000110")
+
+
+async def test_settlement_that_stays_pending_leaves_the_cost_unknown() -> None:
+    metadata, lookups = await completion_with_cost_lookup(
+        lambda _attempt: httpx.Response(202, json={"status": "pending"}),
+        settings_override=settings(cost_lookup_attempts=2),
+    )
+
+    assert len(lookups) == 2
+    assert metadata.usage.cost_usd is None
+    assert metadata.usage.pricing_source is None
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(404, json={"detail": "Not Found"}),
+        httpx.Response(410, json={"detail": "Gone"}),
+        httpx.Response(500, json={"detail": "boom"}),
+        httpx.Response(200, content=b"not-json"),
+        httpx.Response(200, json={"cost_usd": "0.000110", "usage_status": "unavailable"}),
+        httpx.Response(200, json=request_cost_document(pricing_source=None)),
+        httpx.Response(200, json=request_cost_document(usage_status="unavailable")),
+        httpx.Response(200, json=request_cost_document(cost_usd="not-a-number")),
+    ],
+)
+async def test_unusable_settlements_never_record_a_cost(response: httpx.Response) -> None:
+    metadata, lookups = await completion_with_cost_lookup(lambda _attempt: response)
+
+    assert len(lookups) == 1
+    assert metadata.usage.cost_usd is None
+    assert metadata.usage.pricing_source is None
+
+
+async def test_settlement_lookup_failure_does_not_fail_the_completion() -> None:
+    def lookup(_attempt: int) -> httpx.Response:
+        raise httpx.ConnectError("settlement lookup with hosted-ai-token")
+
+    metadata, lookups = await completion_with_cost_lookup(lookup)
+
+    assert len(lookups) == 1
+    assert metadata.request_id == "req_settle"
+    assert metadata.usage.cost_usd is None
+
+
+async def test_inline_settled_cost_skips_the_lookup() -> None:
+    lookups = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal lookups
+        if request.url.path != "/v1/chat/completions":
+            lookups += 1
+        return httpx.Response(
+            200,
+            content=fixture_bytes(),
+            headers={"X-Otari-Request-ID": "req_inline"},
+        )
+
+    async with OtariClient(settings(), transport=httpx.MockTransport(handler)) as client:
+        _result, metadata = await client.structured_completion(
+            model="competitor-scout-main",
+            messages=[{"role": "user", "content": "Plan."}],
+            output_type=ScoutPlan,
+            session_label="run:inline-cost",
+            max_completion_tokens=100,
+            deadline_seconds=5,
+        )
+
+    assert lookups == 0
+    assert metadata.usage.cost_usd == Decimal("0.001234")
+    assert metadata.usage.pricing_source == "hosted_catalog"

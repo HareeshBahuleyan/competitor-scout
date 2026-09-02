@@ -282,7 +282,6 @@ async def test_usage_summary_groups_by_utc_date_and_model_without_identifiers(db
                 "model": "main-model",
                 "input_tokens": 80,
                 "output_tokens": 30,
-                "tool_calls": None,
                 "settled_cost_usd": None,
             },
             {
@@ -290,7 +289,6 @@ async def test_usage_summary_groups_by_utc_date_and_model_without_identifiers(db
                 "model": "child-model",
                 "input_tokens": 150,
                 "output_tokens": 30,
-                "tool_calls": 3,
                 "settled_cost_usd": "0.300000",
             },
         ]

@@ -481,7 +481,7 @@ async def test_daily_run_happy_path_is_bounded_auditable_and_publishes(daily_sto
     child_calls = [call for call in fake.calls if call["output_type"] is ChildTaskResult]
     assert all(call["model"] == "competitor-scout-child" for call in child_calls)
     assert all(call["enable_web_search"] is True for call in child_calls)
-    assert all(call["max_tool_iterations"] == 2 for call in child_calls)
+    assert all(call["max_tool_iterations"] == 4 for call in child_calls)
 
 
 async def test_first_party_child_search_stays_within_approved_scope(daily_store) -> None:
@@ -512,7 +512,7 @@ async def test_first_party_child_search_stays_within_approved_scope(daily_store)
     child_payload = json.loads(child_call["messages"][1]["content"])
     assert status is ScoutRunStatus.COMPLETED
     assert child_call["enable_web_search"] is True
-    assert child_call["max_tool_iterations"] == 2
+    assert child_call["max_tool_iterations"] == 4
     assert child_payload["task"]["source_urls"] == ["https://acme.example/pricing"]
     async with sessions() as session:
         evidence_urls = list(

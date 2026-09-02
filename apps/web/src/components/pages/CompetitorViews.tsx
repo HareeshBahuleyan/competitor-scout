@@ -2,22 +2,26 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { CompetitorFavicon } from "@/components/CompetitorFavicon";
 import { CompetitorForm, type CompetitorFormValues } from "@/components/CompetitorForm";
 import { FindingCard } from "@/components/FindingCard";
 import { MonitorSettings } from "@/components/MonitorSettings";
 import { runTypeLabel } from "@/components/RunOutcomeSummary";
 import { SetupStepper } from "@/components/SetupStepper";
-import { SourceApprovalList } from "@/components/SourceApprovalList";
+import { SourceManagementList } from "@/components/SourceManagementList";
 import { SourceSelectionList } from "@/components/SourceSelectionList";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { WorkingIndicator } from "@/components/ui/WorkingIndicator";
 import { apiGetClient, apiMutate } from "@/lib/api";
 import { meQueryOptions } from "@/lib/current-user";
+import { partialReasonLabels } from "@/lib/runs";
 import {
   competitorPageSchema,
   competitorSchema,
+  findingCategorySchema,
   findingPageSchema,
   runPageSchema,
   runSchema,
@@ -30,6 +34,14 @@ import {
   type CursorPage,
   type Source,
 } from "@/lib/schemas";
+
+const COMPETITOR_LIMIT = 10;
+
+const competitorStatusStyles: Record<string, string> = {
+  active: "bg-emerald-50 text-emerald-700",
+  discovering: "bg-amber-50 text-amber-800",
+  paused: "bg-slate-100 text-slate-700",
+};
 
 function errorText(error: unknown) {
   if (typeof error === "object" && error && "detail" in error) {
@@ -47,6 +59,7 @@ export function CompetitorsListView() {
     queryKey: ["competitors"],
     queryFn: () => apiGetClient("/api/v1/competitors", competitorPageSchema),
   });
+  const competitorCount = query.data?.items.length ?? 0;
   return (
     <section className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -55,12 +68,31 @@ export function CompetitorsListView() {
           <h1 className="mt-1 text-4xl font-semibold">Competitors</h1>
           <p className="mt-2 text-slate-600">Companies monitored by your scout.</p>
         </div>
-        <Link
-          className="inline-flex min-h-10 items-center rounded-xl bg-slate-950 px-4 py-2 font-semibold text-white"
-          href="/competitors/new"
-        >
-          Add competitor
-        </Link>
+        <div className="flex flex-col items-end gap-3">
+          <div className="w-44">
+            <div className="flex items-center justify-between text-xs text-slate-500">
+              <span>Competitors</span>
+              <span>
+                {competitorCount} of {COMPETITOR_LIMIT}
+              </span>
+            </div>
+            <progress
+              aria-label="Competitor slots used"
+              className="mt-1.5 w-full"
+              max={COMPETITOR_LIMIT}
+              value={competitorCount}
+            />
+            <p className="sr-only">
+              {competitorCount} of {COMPETITOR_LIMIT} competitor slots used
+            </p>
+          </div>
+          <Link
+            className="inline-flex min-h-10 items-center rounded-xl bg-slate-950 px-4 py-2 font-semibold text-white"
+            href="/competitors/new"
+          >
+            Add competitor
+          </Link>
+        </div>
       </div>
       {query.isPending ? <LoadingState label="Loading competitors…" rows={4} /> : null}
       {query.isError ? (
@@ -74,25 +106,31 @@ export function CompetitorsListView() {
       {query.data?.items.length ? (
         <ul className="grid gap-4 md:grid-cols-2">
           {query.data.items.map((item) => (
-            <li className="surface surface-interactive p-5" key={item.id}>
+            <li className="surface surface-interactive card-target p-5" key={item.id}>
               <div className="flex justify-between gap-3">
-                <h2 className="font-semibold">
-                  <Link className="hover:underline" href={`/competitors/${item.id}`}>
-                    {item.name}
-                  </Link>
-                </h2>
-                <span className="text-sm capitalize text-slate-500">{item.status}</span>
+                <div className="flex items-center gap-3 min-w-0">
+                  <CompetitorFavicon domain={item.primary_domain} name={item.name} size="md" />
+                  <h2 className="font-semibold truncate">
+                    <Link className="card-link" href={`/competitors/${item.id}`}>
+                      {item.name}
+                    </Link>
+                  </h2>
+                </div>
+                <span
+                  className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium capitalize ${
+                    competitorStatusStyles[item.status] ?? "bg-slate-100 text-slate-700"
+                  }`}
+                >
+                  {item.status}
+                </span>
               </div>
               <p className="mt-2 text-sm text-slate-600">
                 {item.description || item.primary_domain}
               </p>
               {item.status === "discovering" ? (
-                <Link
-                  className="mt-3 inline-flex text-sm font-semibold text-blue-700 hover:underline"
-                  href={`/competitors/${item.id}`}
-                >
-                  Finish setup →
-                </Link>
+                <p className="mt-3 text-sm font-semibold text-[var(--color-accent-strong)]">
+                  Finish setup <span aria-hidden="true">→</span>
+                </p>
               ) : null}
             </li>
           ))}
@@ -104,9 +142,28 @@ export function CompetitorsListView() {
 
 type NewCompetitorViewProps = { pollIntervalMs?: number };
 const terminalStatuses = new Set(["completed", "partial", "failed"]);
+const discoveryMessages = [
+  "Casing the joint for official pages…",
+  "Reading their pricing page so you don't have to…",
+  "Digging through the changelog…",
+  "Sniffing out the blog feed…",
+  "Checking whether the roadmap is public…",
+  "Skipping the marketing fluff…",
+  "Double-checking every URL is first-party…",
+];
+const firstScanMessages = [
+  "Fetching the sources you approved…",
+  "Comparing today against yesterday…",
+  "Ignoring cosmetic copy tweaks…",
+  "Deciding what actually matters…",
+  "Collecting evidence for every claim…",
+  "Almost there — writing up the findings…",
+];
 
 export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewProps) {
   const client = useQueryClient();
+  const searchParams = useSearchParams();
+  const isFirstSetup = searchParams?.get("first") === "1";
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [created, setCreated] = useState<Competitor | null>(null);
   const [discoveryRunId, setDiscoveryRunId] = useState<string | null>(null);
@@ -258,10 +315,14 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
   return (
     <section className="space-y-8">
       <div>
-        <p className="eyebrow">New monitor</p>
-        <h1 className="mt-1 text-4xl font-semibold">Add competitor</h1>
+        <p className="eyebrow">{isFirstSetup ? "Welcome" : "New monitor"}</p>
+        <h1 className="mt-1 text-4xl font-semibold">
+          {isFirstSetup ? "Let's set up your first competitor in 3 steps" : "Add competitor"}
+        </h1>
         <p className="mt-2 text-slate-600">
-          Choose a competitor, confirm trusted sources, and run an initial scan.
+          {isFirstSetup
+            ? "Tell us who to watch, confirm the sources we should trust, and we'll run the first scan for you. Takes about two minutes."
+            : "Choose a competitor, confirm trusted sources, and run an initial scan."}
         </p>
       </div>
       <SetupStepper currentStep={step} />
@@ -288,8 +349,13 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
               We only monitor first-party pages you select. You can change these later.
             </p>
           </div>
-          {discovery.isPending || (discoveryRunId && discoveryRun.isPending) ? (
-            <LoadingState label="Finding first-party sources…" rows={2} />
+          {discovery.isPending ||
+          (discoveryRunId && !terminalStatuses.has(discoveryRun.data?.status ?? "")) ? (
+            <WorkingIndicator
+              hint="This usually takes under a minute"
+              label="Finding first-party sources…"
+              messages={discoveryMessages}
+            />
           ) : null}
           {discovery.isError ? (
             <div className="space-y-3 text-red-700" role="alert">
@@ -382,11 +448,12 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
       {step === 3 ? (
         <div className="surface max-w-2xl space-y-4 p-6">
           <h2 className="text-2xl font-semibold">Your monitor is active</h2>
-          {firstScan.isPending ? <LoadingState label="Running the first scan…" rows={3} /> : null}
-          {firstScan.data && !terminalStatuses.has(firstScan.data.status) ? (
-            <p role="status" className="capitalize">
-              First scan: {firstScan.data.status}…
-            </p>
+          {firstScanRunId && !terminalStatuses.has(firstScan.data?.status ?? "") ? (
+            <WorkingIndicator
+              hint="You can leave this page — the scan keeps running"
+              label="Running the first scan…"
+              messages={firstScanMessages}
+            />
           ) : null}
           {firstScan.data?.status === "completed" || firstScan.data?.status === "partial" ? (
             <p role="status">First scan complete.</p>
@@ -421,6 +488,7 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
   const client = useQueryClient();
   const router = useRouter();
   const [pendingSourceId, setPendingSourceId] = useState<string | null>(null);
+  const [manualSourceUrl, setManualSourceUrl] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [discoveryRunId, setDiscoveryRunId] = useState<string | null>(null);
   const me = useQuery(meQueryOptions);
@@ -506,6 +574,25 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
     },
     onSettled: () => setPendingSourceId(null),
   });
+  const addSource = useMutation({
+    mutationFn: async () => {
+      if (!me.data) throw new Error("Account information is unavailable.");
+      return apiMutate(
+        `/api/v1/competitors/${competitorId}/sources`,
+        {
+          body: { url: manualSourceUrl.trim() },
+          csrfToken: me.data.csrf_token,
+          method: "POST",
+        },
+        sourceSchema,
+      );
+    },
+    onSuccess: async () => {
+      setManualSourceUrl("");
+      setNotice("Source added. Monitor it to include it in scans.");
+      await sources.refetch();
+    },
+  });
   const updateMonitor = useMutation({
     mutationFn: async (body: {
       daily_run_time_local?: string;
@@ -525,20 +612,6 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
       void client.invalidateQueries({ queryKey: ["competitors"] });
       void client.invalidateQueries({ queryKey: ["dashboard"] });
       setNotice("Monitor updated.");
-    },
-  });
-  const addManualSource = useMutation({
-    mutationFn: async (url: string) => {
-      if (!me.data) throw new Error("Account information is unavailable.");
-      return apiMutate(
-        `/api/v1/competitors/${competitorId}/sources`,
-        { body: { url }, csrfToken: me.data.csrf_token, method: "POST" },
-        sourceSchema,
-      );
-    },
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: ["competitor-sources", competitorId] });
-      setNotice("Source added for review.");
     },
   });
   const archiveMonitor = useMutation({
@@ -564,7 +637,7 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
         runSchema,
       );
     },
-    onSuccess: () => setNotice("Scout run queued. An existing recent run may have been reused."),
+    onSuccess: () => setNotice("Scan queued. An existing recent scan may have been reused."),
   });
   if (
     me.isPending ||
@@ -588,7 +661,14 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="eyebrow">{competitor.data.status}</p>
-          <h1 className="mt-1 text-4xl font-semibold">{competitor.data.name}</h1>
+          <div className="mt-1 flex items-center gap-3">
+            <CompetitorFavicon
+              domain={competitor.data.primary_domain}
+              name={competitor.data.name}
+              size="lg"
+            />
+            <h1 className="text-4xl font-semibold">{competitor.data.name}</h1>
+          </div>
           <p className="mt-2 text-slate-600">{competitor.data.description}</p>
           <a
             className="section-link mt-2 inline-block"
@@ -606,14 +686,13 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
             onClick={() => runNow.mutate()}
             type="button"
           >
-            Run now
+            Run scan now
           </button>
         </div>
       </header>
       {discoveryNotice || notice ? <p role="status">{discoveryNotice || notice}</p> : null}
       {sourceUpdate.isError ||
       updateMonitor.isError ||
-      addManualSource.isError ||
       archiveMonitor.isError ||
       runNow.isError ||
       discovery.isError ? (
@@ -621,7 +700,6 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
           {errorText(
             sourceUpdate.error ??
               updateMonitor.error ??
-              addManualSource.error ??
               archiveMonitor.error ??
               runNow.error ??
               discovery.error,
@@ -631,10 +709,7 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
       <MonitorSettings
         competitor={competitor.data}
         hasApprovedSource={hasApproved}
-        isPending={updateMonitor.isPending || addManualSource.isPending || archiveMonitor.isPending}
-        onAddSource={async (url) => {
-          await addManualSource.mutateAsync(url);
-        }}
+        isPending={updateMonitor.isPending || archiveMonitor.isPending}
         onArchive={async () => {
           await archiveMonitor.mutateAsync();
         }}
@@ -646,14 +721,52 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
         }}
       />
       {sources.data.items.length ? (
-        <SourceApprovalList
-          disabled={sourceUpdate.isPending}
-          onUpdate={(sourceId, approval_status) =>
-            sourceUpdate.mutateAsync({ sourceId, approval_status }).then(() => undefined)
-          }
-          pendingSourceId={pendingSourceId}
-          sources={sources.data.items}
-        />
+        <div className="space-y-6">
+          <SourceManagementList
+            disabled={sourceUpdate.isPending}
+            onUpdate={(sourceId, approval_status) =>
+              sourceUpdate.mutateAsync({ sourceId, approval_status }).then(() => undefined)
+            }
+            pendingSourceId={pendingSourceId}
+            sources={sources.data.items}
+          />
+          <form
+            aria-label="Add a source"
+            className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-end"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (manualSourceUrl.trim()) addSource.mutate();
+            }}
+          >
+            <label className="field-label min-w-0 flex-1">
+              Add a first-party source
+              <input
+                aria-describedby="add-source-help"
+                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2"
+                disabled={addSource.isPending}
+                onChange={(event) => setManualSourceUrl(event.target.value)}
+                placeholder={`https://${competitor.data.primary_domain}/changelog`}
+                type="url"
+                value={manualSourceUrl}
+              />
+            </label>
+            <button
+              className="rounded-lg border border-slate-300 px-4 py-2 font-medium disabled:text-slate-400"
+              disabled={!manualSourceUrl.trim() || addSource.isPending}
+              type="submit"
+            >
+              {addSource.isPending ? "Adding…" : "Add source"}
+            </button>
+          </form>
+          <p className="text-sm text-slate-600" id="add-source-help">
+            A new source waits under Awaiting review until you monitor it.
+          </p>
+          {addSource.isError ? (
+            <p className="text-red-700" role="alert">
+              {errorText(addSource.error)}
+            </p>
+          ) : null}
+        </div>
       ) : (
         <div className="space-y-3">
           <p>No sources have been discovered.</p>
@@ -670,41 +783,33 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
       <section className="space-y-4" aria-labelledby="recent-findings-heading">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-xl font-semibold" id="recent-findings-heading">
-            Recent findings
+            Recent updates
           </h2>
           <Link className="section-link" href={`/findings?competitor_id=${competitorId}`}>
-            View all findings
+            View all updates
           </Link>
         </div>
         <form
           action="/findings"
-          aria-label="Filter competitor findings"
+          aria-label="Filter competitor updates"
           className="surface grid gap-3 p-4 sm:grid-cols-4"
           method="get"
         >
           <input name="competitor_id" type="hidden" value={competitorId} />
           <label className="text-sm font-medium">
             Category
-            <select
-              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2"
-              name="category"
-            >
+            <select className="select-control mt-1" name="category">
               <option value="">All categories</option>
-              <option value="pricing">Pricing</option>
-              <option value="product">Product</option>
-              <option value="positioning">Positioning</option>
-              <option value="partnership">Partnership</option>
-              <option value="hiring">Hiring</option>
-              <option value="traction">Traction</option>
-              <option value="other">Other</option>
+              {findingCategorySchema.options.map((category) => (
+                <option key={category} value={category}>
+                  {category.replaceAll("_", " ")}
+                </option>
+              ))}
             </select>
           </label>
           <label className="text-sm font-medium">
             Significance
-            <select
-              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2"
-              name="significance"
-            >
+            <select className="select-control mt-1" name="significance">
               <option value="">All levels</option>
               <option value="high">High</option>
               <option value="critical">Critical</option>
@@ -722,7 +827,7 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
             className="self-end rounded-lg bg-slate-950 px-4 py-2 font-medium text-white"
             type="submit"
           >
-            Filter findings
+            Filter updates
           </button>
         </form>
         {findings.data.items.length ? (
@@ -732,16 +837,16 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
             ))}
           </div>
         ) : (
-          <p className="text-sm text-slate-600">No findings for this competitor yet.</p>
+          <p className="text-sm text-slate-600">No updates for this competitor yet.</p>
         )}
       </section>
       <section className="space-y-4" aria-labelledby="recent-runs-heading">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-xl font-semibold" id="recent-runs-heading">
-            Recent runs
+            Recent scans
           </h2>
           <Link className="section-link" href={`/runs?competitor_id=${competitorId}`}>
-            View all runs
+            View all scans
           </Link>
         </div>
         {recentRuns.data.items.length ? (
@@ -753,10 +858,12 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
                 </Link>
                 <span className="ml-3 text-sm capitalize text-slate-500">{run.status}</span>
                 <span className="ml-3 text-sm text-slate-500">
-                  {run.finding_count} {run.finding_count === 1 ? "finding" : "findings"}
+                  {run.finding_count} update{run.finding_count === 1 ? "" : "s"}
                 </span>
                 {run.partial_reasons.length ? (
-                  <p className="mt-2 text-sm text-amber-700">{run.partial_reasons.join("; ")}</p>
+                  <p className="mt-2 text-sm text-amber-700">
+                    {partialReasonLabels(run.partial_reasons, run.partial_summaries).join("; ")}
+                  </p>
                 ) : null}
                 {run.failure_summary ? (
                   <p className="mt-2 text-sm text-red-700">{run.failure_summary}</p>
@@ -765,7 +872,7 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-slate-600">No runs for this competitor yet.</p>
+          <p className="text-sm text-slate-600">No scans for this competitor yet.</p>
         )}
       </section>
     </article>

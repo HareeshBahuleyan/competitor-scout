@@ -11,7 +11,7 @@ export function FindingCard({
   timeZone?: string;
 }) {
   return (
-    <article className="surface surface-interactive group p-5">
+    <article className="surface surface-interactive card-target group p-5">
       <div className="flex items-start gap-4">
         <span
           aria-hidden="true"
@@ -35,7 +35,7 @@ export function FindingCard({
           </div>
           <h2 className="mt-1.5 text-[17px] font-semibold leading-snug">
             <Link
-              className="transition-colors group-hover:text-[#b93e42]"
+              className="card-link transition-colors group-hover:text-[var(--color-accent-strong)]"
               href={`/findings/${finding.id}`}
             >
               {finding.title}
@@ -49,6 +49,15 @@ export function FindingCard({
             <time dateTime={finding.published_at}>
               {formatUserDateTime(finding.published_at, timeZone)}
             </time>
+            <span className="ml-auto font-semibold text-[var(--color-accent-strong)]">
+              View update
+              <span
+                aria-hidden="true"
+                className="ml-1 inline-block transition-transform group-hover:translate-x-0.5"
+              >
+                →
+              </span>
+            </span>
           </div>
         </div>
       </div>

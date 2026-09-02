@@ -70,8 +70,14 @@ def child_messages(task: object) -> list[dict[str, str]]:
     return _messages(
         task,
         (
-            "Return ChildTaskResult only. Web search is allowed only when the request "
-            "declares it, and only within the assigned task and search budget."
+            "Return ChildTaskResult only with this exact structure:\n"
+            '{"sources_inspected": [<URLs reviewed>], "evidence": [<evidence items>], '
+            '"limitations": [<scope limits>]}\n'
+            "Each evidence item must have: source_url, source_title, "
+            "source_type (first_party|news), quoted_text (20-5000 chars), "
+            "normalized_claim (1-1000 chars), confidence (0-1), "
+            "and optional published_at/limitations.\n"
+            "Web search is allowed only when declared and within the task and search budget."
         ),
     )
 
@@ -79,5 +85,14 @@ def child_messages(task: object) -> list[dict[str, str]]:
 def synthesis_messages(evidence: object) -> list[dict[str, str]]:
     return _messages(
         evidence,
-        "Return SynthesisResult only. Synthesis has no tool access.",
+        (
+            'Return SynthesisResult only: {"findings": [<findings>]}\n'
+            "Each finding must have: category, title (1-300 chars), summary (1-3000), "
+            "significance_level (low|medium|high|critical), confidence (0-1), "
+            "normalized_claim (1-1000), material_change (bool), "
+            "evidence_indexes (sorted, unique integers ≥0), "
+            "primary_evidence_index (in evidence_indexes), "
+            "and decision_rationale (1-2000 chars).\n"
+            "Synthesis has no tool access."
+        ),
     )

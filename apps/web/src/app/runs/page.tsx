@@ -1,5 +1,5 @@
 import { AppShell } from "@/components/AppShell";
-import { RunsListView } from "@/components/pages/RunViews";
+import { RunsListView } from "@/components/pages/AuditViews";
 
 export default async function RunsPage({
   searchParams,

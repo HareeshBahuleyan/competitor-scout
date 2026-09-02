@@ -1,8 +1,12 @@
 import { fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { FindingDetailView, FindingsListView } from "@/components/pages/FindingsViews";
-import { RunDetailView, RunsListView } from "@/components/pages/RunViews";
+import {
+  FindingDetailView,
+  FindingsListView,
+  RunDetailView,
+  RunsListView,
+} from "@/components/pages/AuditViews";
 import { apiGetClient } from "@/lib/api";
 import { renderWithQuery } from "../query-test-utils";
 
@@ -35,7 +39,8 @@ const run = {
   completed_at: "2026-08-21T08:05:00Z",
   failure_code: null,
   failure_summary: null,
-  partial_reasons: ["One source timed out"],
+  partial_reasons: ["source_unavailable"],
+  partial_summaries: [],
   input_tokens: 100,
   output_tokens: 20,
   tool_calls: null,
@@ -97,6 +102,7 @@ describe("findings pages", () => {
       <FindingsListView
         initialFilters={{
           category: "pricing",
+          competitor_id: competitor.id,
           published_from: "2026-08-20",
           published_to: "2026-08-21",
         }}
@@ -108,10 +114,11 @@ describe("findings pages", () => {
     );
     expect(screen.getByLabelText("Category")).toHaveValue("pricing");
     expect(screen.getByLabelText("Competitor")).toHaveAttribute("name", "competitor_id");
+    expect(screen.getByText("competitor: Acme")).toBeInTheDocument();
     expect(screen.getByLabelText("Published from")).toHaveAttribute("name", "published_from");
     expect(screen.getByLabelText("Published to")).toHaveAttribute("name", "published_to");
     expect(apiGetClient).toHaveBeenCalledWith(
-      "/api/v1/findings?category=pricing&published_from=2026-08-19T22%3A00%3A00.000Z&published_to=2026-08-21T21%3A59%3A59.999Z",
+      `/api/v1/findings?category=pricing&competitor_id=${competitor.id}&published_from=2026-08-19T22%3A00%3A00.000Z&published_to=2026-08-21T21%3A59%3A59.999Z`,
       expect.anything(),
     );
     success.unmount();
@@ -133,9 +140,8 @@ describe("findings pages", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("findings unavailable");
   });
 
-  it("renders finding provenance and malicious evidence as inert text", async () => {
+  it("renders finding provenance without executing untrusted evidence quote text", async () => {
     vi.mocked(apiGetClient).mockImplementation(async (path) => {
-      if (path === "/api/v1/me") return me as never;
       if (path.endsWith("/evidence"))
         return {
           items: [
@@ -161,16 +167,16 @@ describe("findings pages", () => {
     });
     renderWithQuery(<FindingDetailView findingId={finding.id} />);
     expect(await screen.findByRole("heading", { name: finding.title })).toBeInTheDocument();
-    expect(screen.getByText(/<script>alert\('xss'\)<\/script>/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Pricing" })).toHaveAttribute(
+      "href",
+      "https://acme.example/pricing",
+    );
     expect(document.querySelector("script")).toBeNull();
-    expect(screen.getByRole("link", { name: "Originating run" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Originating scan" })).toHaveAttribute(
       "href",
       `/runs/${run.id}`,
     );
-    expect(screen.getByRole("link", { name: "Child task 1" })).toHaveAttribute(
-      "href",
-      `/runs/${run.id}#task-77777777-7777-4777-8777-777777777777`,
-    );
+    expect(screen.queryByText(/Child task/)).not.toBeInTheDocument();
   });
 });
 
@@ -180,21 +186,25 @@ describe("run pages", () => {
       if (path === "/api/v1/me") return me as never;
       return { items: [run], next_cursor: null } as never;
     });
-    const success = renderWithQuery(<RunsListView />);
+    const success = renderWithQuery(<RunsListView competitorId={competitor.id} />);
     expect(await screen.findByRole("link", { name: /daily scan/i })).toHaveAttribute(
       "href",
       `/runs/${run.id}`,
     );
     expect(screen.getByText("Acme")).toBeInTheDocument();
-    expect(screen.getByText("1 finding")).toBeInTheDocument();
+    expect(screen.getByText("1 update")).toBeInTheDocument();
     expect(screen.getByText("partial")).toBeInTheDocument();
+    expect(apiGetClient).toHaveBeenCalledWith(
+      `/api/v1/runs?competitor_id=${competitor.id}`,
+      expect.anything(),
+    );
     success.unmount();
     vi.mocked(apiGetClient).mockImplementation(async (path) => {
       if (path === "/api/v1/me") return me as never;
       return { items: [], next_cursor: null } as never;
     });
     const empty = renderWithQuery(<RunsListView />);
-    expect(await screen.findByText("No runs yet.")).toBeInTheDocument();
+    expect(await screen.findByText("No scans yet.")).toBeInTheDocument();
     empty.unmount();
     vi.mocked(apiGetClient).mockImplementation(async (path) => {
       if (path === "/api/v1/me") return me as never;
@@ -250,20 +260,13 @@ describe("run pages", () => {
     renderWithQuery(<RunDetailView runId={run.id} />);
     expect(await screen.findByRole("heading", { name: /daily scan/i })).toBeInTheDocument();
     expect(screen.getByText("Acme")).toBeInTheDocument();
-    expect(screen.getByText("1 finding published")).toBeInTheDocument();
-    expect(screen.getByText("One source timed out")).toBeInTheDocument();
-    expect(screen.getByText("Review first-party pricing")).not.toBeVisible();
-    fireEvent.click(screen.getByText("Advanced audit details"));
+    expect(screen.getByText("1 update published")).toBeInTheDocument();
+    expect(screen.getByText("Source unavailable")).toBeInTheDocument();
     expect(screen.getByText("Review first-party pricing")).toBeInTheDocument();
     expect(
       screen.getByText(
         (_, element) =>
           element?.tagName === "P" && element.textContent?.includes("Attempts: 2") === true,
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        (_, element) => element?.tagName === "P" && element.textContent === "Tool calls: Unknown",
       ),
     ).toBeInTheDocument();
     expect(

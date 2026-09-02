@@ -4,13 +4,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
-type IconName = "briefs" | "competitors" | "dashboard" | "findings" | "runs" | "settings";
+type IconName = "competitors" | "dashboard" | "digest" | "settings" | "updates";
 
+// `/runs` is deliberately absent: it is an advanced troubleshooting surface reached
+// from Settings and from dashboard scan warnings, not a primary workspace section.
 const navigation: ReadonlyArray<{ href: string; icon: IconName; label: string }> = [
-  { href: "/", icon: "dashboard", label: "Overview" },
+  { href: "/", icon: "dashboard", label: "Dashboard" },
   { href: "/competitors", icon: "competitors", label: "Competitors" },
-  { href: "/findings", icon: "findings", label: "Intelligence" },
-  { href: "/briefs", icon: "briefs", label: "Briefs" },
+  { href: "/findings", icon: "updates", label: "Updates" },
+  { href: "/briefs", icon: "digest", label: "Weekly Digest" },
   { href: "/settings", icon: "settings", label: "Settings" },
 ];
 
@@ -30,19 +32,13 @@ const iconPaths: Record<IconName, ReactNode> = {
       <path d="M16 4.5a3 3 0 0 1 0 6M17 14a5 5 0 0 1 3.5 5" />
     </>
   ),
-  findings: (
+  updates: (
     <>
       <path d="m4 17 5-5 4 3 7-8" />
       <path d="M15 7h5v5" />
     </>
   ),
-  runs: (
-    <>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3 2" />
-    </>
-  ),
-  briefs: (
+  digest: (
     <>
       <path d="M6 3h9l3 3v15H6z" />
       <path d="M14 3v4h4M9 11h6M9 15h6" />
