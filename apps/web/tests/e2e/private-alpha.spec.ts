@@ -267,7 +267,9 @@ test("explains a partial run and its retries", async ({ page }) => {
   await expect(page.getByText("Settled cost: Unknown")).toBeVisible();
 });
 
-test("renders finding evidence as inert text with provenance", async ({ page }) => {
+test("renders finding evidence citations without executing untrusted quote text", async ({
+  page,
+}) => {
   await mockAuthenticatedUser(page);
   const findingId = "55555555-5555-4555-8555-555555555555";
   const runId = "33333333-3333-4333-8333-333333333333";
@@ -321,7 +323,10 @@ test("renders finding evidence as inert text with provenance", async ({ page }) 
   await page.goto(`/findings/${findingId}`);
 
   await expect(page.getByRole("heading", { name: "Acme introduced annual pricing" })).toBeVisible();
-  await expect(page.getByText(/<script>window.__evidenceExecuted=true<\/script>/)).toBeVisible();
+  await expect(page.getByRole("link", { name: "Pricing" })).toHaveAttribute(
+    "href",
+    "https://acme.example/pricing",
+  );
   expect(
     await page.evaluate(
       () => (window as Window & { __evidenceExecuted?: boolean }).__evidenceExecuted,

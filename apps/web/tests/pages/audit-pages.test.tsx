@@ -97,7 +97,7 @@ describe("findings pages", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("findings unavailable");
   });
 
-  it("renders finding provenance and malicious evidence as inert text", async () => {
+  it("renders finding provenance without executing untrusted evidence quote text", async () => {
     vi.mocked(apiGetClient).mockImplementation(async (path) => {
       if (path.endsWith("/evidence"))
         return {
@@ -124,16 +124,16 @@ describe("findings pages", () => {
     });
     renderWithQuery(<FindingDetailView findingId={finding.id} />);
     expect(await screen.findByRole("heading", { name: finding.title })).toBeInTheDocument();
-    expect(screen.getByText(/<script>alert\('xss'\)<\/script>/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Pricing" })).toHaveAttribute(
+      "href",
+      "https://acme.example/pricing",
+    );
     expect(document.querySelector("script")).toBeNull();
     expect(screen.getByRole("link", { name: "Originating run" })).toHaveAttribute(
       "href",
       `/runs/${run.id}`,
     );
-    expect(screen.getByRole("link", { name: "Child task 1" })).toHaveAttribute(
-      "href",
-      `/runs/${run.id}#task-77777777-7777-4777-8777-777777777777`,
-    );
+    expect(screen.queryByText(/Child task/)).not.toBeInTheDocument();
   });
 });
 
