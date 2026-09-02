@@ -45,6 +45,12 @@ The custom slate scale provides warm neutrals. Existing Tailwind `blue-50` and `
 
 Use Tailwind's spacing scale for layout. Arbitrary values are reserved for established shell constraints, icon sizing, or typography tuning that cannot be expressed clearly by the scale.
 
+### HeroUI token mapping
+
+HeroUI 3 resolves its own controls from semantic variables such as `--field-background`, `--field-border`, `--field-radius`, `--overlay`, `--accent`, `--border`, and `--muted`. A single `:root` block in `globals.css`, placed after the `@heroui/styles` import so its values win, maps those onto the workspace tokens above. The installed `@heroui/styles` package is the reference for which variable a given utility reads; see `dist/themes/shared/theme.css` for the mapping and `dist/components/` for per-component rules.
+
+Change HeroUI's appearance in that block. Do not restyle HeroUI components individually with class overrides: the mapping keeps every current and future HeroUI control consistent, while per-component overrides drift.
+
 ### Typography
 
 The sans stack begins with Avenir Next and falls back to system sans fonts. Page titles use `text-4xl font-semibold` with tight tracking supplied by `.app-content`. Section titles usually use `text-xl font-semibold`. Body text uses slate-600/700 with comfortable line height. `.eyebrow` is the standard compact uppercase contextual label.
@@ -59,9 +65,38 @@ Do not communicate hierarchy by shrinking important text below readable sizes. U
 - `.surface-interactive`: hover elevation for a genuinely clickable surface.
 - `.empty-state`: dashed, quiet container for absent data.
 - `.section-link`: compact accent link for secondary navigation.
+- `.field-label` and `.select-control`: form label and native-select treatment.
 - `.nav-link`, `.icon-button`, and `.brand-mark`: shell-specific patterns.
 
 Keep shell classes in global CSS. Prefer a React primitive under `components/ui/` when a pattern has props, accessibility behavior, variants, or repeated markup. Keep one-page composition local to `components/pages/`.
+
+## Workspace navigation
+
+`PrimaryNavigation` carries the sections a reader acts on. Each is a destination someone opens to answer a question about competitors, not a view of how the system executed.
+
+| Section       | Route          | Purpose                                                            |
+| ------------- | -------------- | ------------------------------------------------------------------ |
+| Dashboard     | `/`            | Active monitors, material updates, scans needing attention, digest |
+| Competitors   | `/competitors` | Monitored companies; `/competitors/new` is the guided setup        |
+| Updates       | `/findings`    | One detected change per row, filterable, each with linked evidence |
+| Weekly digest | `/briefs`      | Per-week narrative whose sections cite the updates behind them     |
+| Settings      | `/settings`    | Profile, default schedule, usage totals, troubleshooting           |
+
+Updates and the weekly digest are the same intelligence at two granularities: the atomic feed to search and cite, and the synthesized read for a week. Keep that relationship visible by linking digest sections back to individual updates.
+
+Operator surfaces stay out of primary navigation. `/runs` and `/runs/{id}` render Scout Run lifecycle timelines, child agent tasks, and per-run token and cost usage, which is execution detail rather than intelligence. They remain fully routed and reachable in context — from Settings troubleshooting, dashboard scan warnings, a competitor's recent scans, guided setup during a first scan, and the provenance links on evidence, finding, and brief detail — so a reader arrives with a reason instead of browsing there. Apply the same rule to any future diagnostic view.
+
+### Interface vocabulary
+
+User-facing copy uses the reader's words, while routes, API paths, and schema fields keep the backend contract's names.
+
+| Interface     | Contract     |
+| ------------- | ------------ |
+| update        | finding      |
+| weekly digest | weekly brief |
+| scan          | run          |
+
+Renaming a surface is a copy change only; do not rename routes or Zod fields to match, because the backend Pydantic model is the contract's source of truth.
 
 ## Component ownership
 
@@ -97,6 +132,11 @@ Always pair color with a text label, icon, shape, or position. Use `role="alert"
 - Use a minimum practical target height of 40px for primary controls.
 - Disable controls during in-flight mutations when duplicate submission is unsafe and expose submitting text.
 - Do not rely only on placeholder text or native browser validation for domain rules.
+- Do not ask for a machine identifier a reader would have to look up. Offer the recognizable choice and store the identifier the API needs.
+
+A native `<select>` renders its open list through the operating system, which ignores page CSS, so `.select-control` can style the closed control but never the dropdown itself. Use HeroUI's `Select` with a `ListBox` whenever the list needs product styling or grouping. Keep a native `<select>` only where an element must submit inside a plain GET form without JavaScript, as the Updates and competitor-detail filters do.
+
+`src/components/ui/TimezoneSelect.tsx` is the reference for a themed grouped dropdown. It shows 39 region-grouped zones by default and reveals the full IANA set on request. `@vvo/tzdb` supplies current offsets, region grouping, and alias groups; a unit test asserts every short-list zone is still canonical, so a tzdata rename fails the suite instead of shipping a dead option. Two cases it handles deliberately, worth repeating in any picker over an evolving external list: a stored value that is a deprecated alias resolves to its canonical entry, and a stored value the database no longer knows stays visible as its own option rather than being silently reassigned.
 
 Animations should be brief and reinforce causality. The global reduced-motion query suppresses transitions and animations; new motion must remain compatible with it.
 

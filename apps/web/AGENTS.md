@@ -16,7 +16,7 @@ Read `docs/frontend/design-system.md` before adding reusable components, tokens,
 
 ## Framework and boundaries
 
-- This app uses Next.js 16, React 19, Tailwind CSS 4, HeroUI 3, TanStack Query 5, and Zod 3. Inspect the relevant installed Next.js guide under `node_modules/next/dist/docs/` before changing framework behavior.
+- This app uses Next.js 16, React 19, Tailwind CSS 4, HeroUI 3, TanStack Query 5, and Zod 3, plus `@vvo/tzdb` for IANA timezone data. Inspect the relevant installed Next.js guide under `node_modules/next/dist/docs/` before changing framework behavior.
 - Prefer server components. Add `"use client"` only for state, effects, event handlers, context, or browser-only APIs; keep client boundaries narrow.
 - Keep `src/app/` route files focused on metadata, parameters, and view composition.
 - Choose the component ownership level from the table in `docs/frontend/design-system.md`.
@@ -35,11 +35,16 @@ Read `docs/frontend/design-system.md` before adding reusable components, tokens,
 
 - Reuse semantic variables and established patterns in `src/app/globals.css`; do not add literal product colors when a semantic token fits.
 - Use HeroUI when it provides useful accessible behavior and matches an existing project pattern. Use semantic HTML or a small local component for simple markup.
+- Restyle HeroUI through the token mapping block in `globals.css`, not with per-component class overrides.
+- A native `<select>` cannot style its own dropdown list. Use HeroUI's `Select` with a `ListBox` when the list needs product styling; keep a native `<select>` only where a control must submit inside a plain GET form without JavaScript.
+- Keep operator and diagnostic routes such as `/runs` out of `PrimaryNavigation`; link them from the context that motivates opening them.
+- Use the interface vocabulary in `docs/frontend/design-system.md` for user-facing copy, and leave routes, API paths, and Zod fields on the backend contract's names.
 - Extract a shared component only when it centralizes repeated markup, behavior, tokens, or accessibility requirements.
 
 ## Tests and verification
 
 - Use Testing Library and Vitest for user-visible behavior, semantics, forms, and state transitions. Avoid assertions coupled only to Tailwind class strings.
+- Drive HeroUI and react-aria overlays with `@testing-library/user-event`; `fireEvent` does not dispatch the pointer sequence that opens a popover.
 - Use Playwright for critical authentication and cross-page workflows, not for every component variant.
 - Do not update snapshots or loosen assertions merely to make a failure disappear; verify the intended behavior first.
 
