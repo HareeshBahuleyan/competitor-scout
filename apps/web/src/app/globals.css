@@ -198,7 +198,7 @@ textarea {
   letter-spacing: -0.018em;
 }
 
-.app-content :is(input, select, textarea) {
+.app-content :is(input, textarea) {
   border-color: var(--color-border);
   background: var(--color-surface);
   box-shadow: inset 0 1px 2px rgba(48, 40, 32, 0.025);
@@ -207,7 +207,7 @@ textarea {
     box-shadow 150ms ease;
 }
 
-.app-content :is(input, select, textarea):focus {
+.app-content :is(input, textarea):focus {
   border-color: #d99092;
   box-shadow: var(--focus-ring);
   outline: none;
@@ -218,53 +218,6 @@ textarea {
   color: var(--color-slate-700);
   font-size: 0.875rem;
   font-weight: 500;
-}
-
-/* Native selects render an OS chevron and OS-tinted option lists, so the control
-   is repainted with the workspace tokens and its own caret. */
-.select-control {
-  width: 100%;
-  min-height: 2.5rem;
-  appearance: none;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  background-color: var(--color-surface);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%237d766e' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1.5 6 6.5l5-5'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.85rem center;
-  background-size: 0.7rem;
-  padding: 0.55rem 2.5rem 0.55rem 0.85rem;
-  color: var(--color-ink);
-  font-size: 0.875rem;
-  box-shadow: inset 0 1px 2px rgba(48, 40, 32, 0.025);
-  transition:
-    border-color 150ms ease,
-    box-shadow 150ms ease;
-}
-
-.select-control:hover:not(:disabled) {
-  border-color: #d8c9c1;
-}
-
-.select-control:focus {
-  border-color: #d99092;
-  box-shadow: var(--focus-ring);
-  outline: none;
-}
-
-.select-control optgroup {
-  color: var(--color-slate-500);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.select-control option {
-  color: var(--color-ink);
-  font-weight: 400;
-  letter-spacing: normal;
-  text-transform: none;
 }
 
 .surface {

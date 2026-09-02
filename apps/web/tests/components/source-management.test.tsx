@@ -126,20 +126,4 @@ describe("SourceManagementList", () => {
 
     expect(screen.getByRole("button", { name: "Stop monitoring Pricing" })).toBeDisabled();
   });
-
-  it("explains that monitoring a source and activating monitoring are separate", () => {
-    const { rerender } = render(
-      <SourceManagementList
-        onUpdate={vi.fn()}
-        sources={[{ ...pricingSource, approval_status: "suggested" }]}
-      />,
-    );
-
-    expect(
-      screen.getByText("Monitor at least one trusted source before activating monitoring."),
-    ).toBeVisible();
-
-    rerender(<SourceManagementList onUpdate={vi.fn()} sources={[pricingSource]} />);
-    expect(screen.getByText("Scans use 1 monitored source.")).toBeVisible();
-  });
 });

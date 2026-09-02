@@ -10,12 +10,14 @@ import { FindingCard } from "@/components/FindingCard";
 import { RunOutcomeSummary, runTypeLabel } from "@/components/RunOutcomeSummary";
 import { RunTimeline, type RunTimelineStep } from "@/components/RunTimeline";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { SelectField, type SelectFieldOption } from "@/components/ui/SelectField";
 import { apiGetClient } from "@/lib/api";
 import { meQueryOptions } from "@/lib/current-user";
 import { formatUserDateTime, localDateBoundaryUtc } from "@/lib/dates";
 import {
   agentTaskPageSchema,
   competitorPageSchema,
+  findingCategorySchema,
   findingEvidencePageSchema,
   findingPageSchema,
   findingSchema,
@@ -54,21 +56,20 @@ function queryString(filters: FindingFilters, timeZone: string) {
   return encoded ? `?${encoded}` : "";
 }
 
-const categories = [
-  "",
-  "pricing",
-  "product",
-  "feature",
-  "positioning",
-  "integration",
-  "customer_win",
-  "partnership",
-  "leadership",
-  "hiring",
-  "market_expansion",
-  "other",
+const categoryOptions: SelectFieldOption[] = [
+  { label: "All categories", value: "" },
+  ...findingCategorySchema.options.map((value) => ({
+    label: value.replaceAll("_", " "),
+    value,
+  })),
 ];
-const significance = ["", "low", "medium", "high", "critical"];
+const significanceOptions: SelectFieldOption[] = [
+  { label: "All levels", value: "" },
+  { label: "Low", value: "low" },
+  { label: "Medium", value: "medium" },
+  { label: "High", value: "high" },
+  { label: "Critical", value: "critical" },
+];
 
 export function FindingsListView({ initialFilters }: { initialFilters: FindingFilters }) {
   const activeFilters = Object.entries(initialFilters).filter(([, value]) => Boolean(value));
@@ -124,49 +125,33 @@ export function FindingsListView({ initialFilters }: { initialFilters: FindingFi
       ) : null}
       {filtersOpen ? (
         <form action="/findings" className="surface grid gap-4 p-4 sm:grid-cols-3" method="get">
-          <label className="text-sm font-medium">
-            Competitor
-            <select
-              className="select-control mt-1"
-              defaultValue={initialFilters.competitor_id ?? ""}
-              name="competitor_id"
-            >
-              <option value="">All competitors</option>
-              {competitors.data?.items.map((competitor) => (
-                <option key={competitor.id} value={competitor.id}>
-                  {competitor.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm font-medium">
-            Category
-            <select
-              className="select-control mt-1"
-              defaultValue={initialFilters.category ?? ""}
-              name="category"
-            >
-              {categories.map((value) => (
-                <option key={value} value={value}>
-                  {value ? value.replaceAll("_", " ") : "All categories"}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm font-medium">
-            Significance
-            <select
-              className="select-control mt-1"
-              defaultValue={initialFilters.significance ?? ""}
-              name="significance"
-            >
-              {significance.map((value) => (
-                <option key={value} value={value}>
-                  {value || "All levels"}
-                </option>
-              ))}
-            </select>
-          </label>
+          <SelectField
+            defaultValue={initialFilters.competitor_id}
+            id="updates-competitor-filter"
+            label="Competitor"
+            name="competitor_id"
+            options={[
+              { label: "All competitors", value: "" },
+              ...(competitors.data?.items.map((competitor) => ({
+                label: competitor.name,
+                value: competitor.id,
+              })) ?? []),
+            ]}
+          />
+          <SelectField
+            defaultValue={initialFilters.category}
+            id="updates-category-filter"
+            label="Category"
+            name="category"
+            options={categoryOptions}
+          />
+          <SelectField
+            defaultValue={initialFilters.significance}
+            id="updates-significance-filter"
+            label="Significance"
+            name="significance"
+            options={significanceOptions}
+          />
           <label className="text-sm font-medium">
             Minimum confidence
             <input

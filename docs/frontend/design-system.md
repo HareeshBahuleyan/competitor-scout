@@ -66,8 +66,8 @@ Do not communicate hierarchy by shrinking important text below readable sizes. U
 - `.card-target` with `.card-link`: whole-card or whole-row click target. The container carries `.card-target`, the single real `<Link>` inside carries `.card-link` and stretches over the container, and the container shows the focus ring while that link has focus. Put content that must stay independently interactive or selectable in `.card-above`. Pair it with `.surface-interactive` so the hover affordance and the click target describe the same area, and keep a visible textual cue such as an arrow so the card reads as navigation.
 - `.empty-state`: dashed, quiet container for absent data.
 - `.section-link`: compact accent link for secondary navigation.
-- `.text-link`: inline link inside body copy or a heading, underlined so it does not rely on color alone. Evidence citations use it for the source title and for URLs found inside quoted source text.
-- `.field-label` and `.select-control`: form label and native-select treatment.
+- `.text-link`: inline link inside body copy or a heading, underlined so it does not rely on color alone. Evidence citations use it for the source title and for URLs found inside quoted source text. `EvidenceList` renders each normalized HTTPS destination once, keeping the earliest citation order when multiple evidence records reference the same link.
+- `.field-label`: the shared form-label treatment used by native fields and HeroUI controls.
 - `.nav-link`, `.icon-button`, and `.brand-mark`: shell-specific patterns.
 
 Keep shell classes in global CSS. Prefer a React primitive under `components/ui/` when a pattern has props, accessibility behavior, variants, or repeated markup. Keep one-page composition local to `components/pages/`.
@@ -132,7 +132,7 @@ Always pair color with a text label, icon, shape, or position. Use `role="alert"
 
 ### Source management
 
-A competitor's sources are settings, not a review queue, so the detail page never re-asks a decision the reader already made. `SourceManagementList` groups them by whether scans use them — Monitored, Awaiting review, Not monitored — and offers only the action that changes the current state: Stop monitoring for a monitored source, Monitor for one that is not, and Monitor plus Dismiss for a source still awaiting review. The `suggested` / `approved` / `rejected` contract values stay on the API; the interface names the reader's state.
+A competitor's sources are settings, not a review queue, so the detail page never re-asks a decision the reader already made. The closed-by-default Sources disclosure appears after Recent updates and contains source management, source entry, and recovery when discovery finds nothing. `SourceManagementList` groups existing sources by whether scans use them — Monitored, Awaiting review, Not monitored — and offers only the action that changes the current state: Stop monitoring for a monitored source, Monitor for one that is not, and Monitor plus Dismiss for a source still awaiting review. The `suggested` / `approved` / `rejected` contract values stay on the API; the interface names the reader's state.
 
 Copy states the consequence next to the control: removing the last monitored source pauses daily monitoring, because the backend returns the competitor to discovering when no approved source remains. A source added from the detail page arrives awaiting review rather than silently entering the next scan.
 
@@ -140,7 +140,7 @@ Stopping the last monitored source requires an alert-dialog confirmation. The co
 
 ### Monitor settings and local time
 
-`MonitorSettings` owns the competitor-level controls on the detail page: name, description, local daily scan time, pause/resume, and archive. Source entry and source-state changes remain in the source-management section so the interface does not offer duplicate controls for the same operation. Archiving requires confirmation and explains that existing updates and scan history are retained.
+`MonitorSettings` owns the competitor-level controls on the detail page: name, description, local daily scan time, pause/resume, and archive. The panel is closed by default and opens from the `Edit competitor info` disclosure beside the primary scan action, keeping infrequent settings out of the reading flow. Recent updates remain visible by default; the heavier Sources and Recent scans sections use the shared closed-by-default `CollapsibleSection`. Source entry and source-state changes remain in the source-management section so the interface does not offer duplicate controls for the same operation. Archiving requires confirmation and explains that existing updates and scan history are retained.
 
 Authenticated timestamps render in the account timezone. Date-only filters represent the reader's local calendar day, so the client converts their start and end boundaries to UTC before calling the API, including across daylight-saving transitions. Scan summaries lead with the competitor name, published-update count, and backend-authored outcome copy; lifecycle and task detail remain available on the diagnostic scan page.
 
@@ -154,7 +154,7 @@ Authenticated timestamps render in the account timezone. Date-only filters repre
 - Do not rely only on placeholder text or native browser validation for domain rules.
 - Do not ask for a machine identifier a reader would have to look up. Offer the recognizable choice and store the identifier the API needs.
 
-A native `<select>` renders its open list through the operating system, which ignores page CSS, so `.select-control` can style the closed control but never the dropdown itself. Use HeroUI's `Select` with a `ListBox` whenever the list needs product styling or grouping. Keep a native `<select>` only where an element must submit inside a plain GET form without JavaScript, as the Updates and competitor-detail filters do.
+A native `<select>` renders its open list through the operating system and cannot follow the product theme consistently. Use HeroUI's `Select` with a `ListBox` for every dropdown. `src/components/ui/SelectField.tsx` is the standard flat-option form control; it mirrors the Settings timezone picker and submits its selected value through a hidden input, including inside GET filter forms.
 
 `src/components/ui/TimezoneSelect.tsx` is the reference for a themed grouped dropdown. It shows 39 region-grouped zones by default and reveals the full IANA set on request. `@vvo/tzdb` supplies current offsets, region grouping, and alias groups; a unit test asserts every short-list zone is still canonical, so a tzdata rename fails the suite instead of shipping a dead option. Two cases it handles deliberately, worth repeating in any picker over an evolving external list: a stored value that is a deprecated alias resolves to its canonical entry, and a stored value the database no longer knows stays visible as its own option rather than being silently reassigned.
 
