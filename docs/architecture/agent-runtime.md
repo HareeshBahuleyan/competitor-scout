@@ -32,6 +32,23 @@ stateDiagram-v2
 
 Re-entry into an intermediate run state indicates recovery after lease loss. The runtime terminalizes interrupted ownership rather than blindly duplicating work.
 
+### Finding categories
+
+The planner assigns each research task an expected category. Accepted evidence carries that value into synthesis as an `expected_category_hint`, but the synthesizer treats it as a hypothesis rather than evidence and overrides it when the quoted source supports a different category. The prompt owns the canonical definitions and ambiguity rules; the structured contract limits output to these categories:
+
+- `pricing`: prices, plans, packaging, quotas, discounts, and plan entitlements.
+- `product`: product launches, built-in capabilities and features, workflows, improvements, and removals.
+- `positioning`: messaging, claimed differentiation, target customers, and stated market identity without a product change.
+- `integration`: connections or technical relationships with a named third-party product or platform.
+- `customer_win`: a named organization selecting, buying, adopting, or endorsing the competitor.
+- `partnership`: a two-way commercial, channel, implementation, or technology relationship.
+- `leadership`: executive or board appointments, departures, and promotions.
+- `hiring`: open roles, hiring pushes, headcount expansion, and hiring slowdowns.
+- `market_expansion`: entry into or withdrawal from a geography or market, including regional offices and localized availability.
+- `other`: a material change that fits none of the categories above.
+
+`product` includes the former `feature` category. Migration `0009_merge_feature_into_product` preserves historical findings by relabeling them before removing the legacy database enum value.
+
 ## Other run types
 
 - **Source discovery** searches within configured limits, validates public URLs and registrable-domain scope, and creates suggestions without overriding prior approval decisions.

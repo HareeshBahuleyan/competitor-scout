@@ -20,7 +20,6 @@ class ChildTaskKind(StrEnum):
 class FindingCategory(StrEnum):
     PRICING = "pricing"
     PRODUCT = "product"
-    FEATURE = "feature"
     POSITIONING = "positioning"
     INTEGRATION = "integration"
     CUSTOMER_WIN = "customer_win"
@@ -29,6 +28,48 @@ class FindingCategory(StrEnum):
     HIRING = "hiring"
     MARKET_EXPANSION = "market_expansion"
     OTHER = "other"
+
+
+FINDING_CATEGORY_DEFINITIONS: dict[FindingCategory, str] = {
+    FindingCategory.PRICING: (
+        "Prices, plans, packaging, usage limits, discounts, or which capabilities a plan includes."
+    ),
+    FindingCategory.PRODUCT: (
+        "A product launch, built-in capability, feature, workflow, product improvement, or removal."
+    ),
+    FindingCategory.POSITIONING: (
+        "A change in messaging, claimed differentiation, target customer, or stated "
+        "market identity "
+        "without a corresponding product change."
+    ),
+    FindingCategory.INTEGRATION: (
+        "A connection, connector, interoperability announcement, or technical relationship with a "
+        "named third-party product or platform."
+    ),
+    FindingCategory.CUSTOMER_WIN: (
+        "A named organization newly selecting, buying, adopting, or publicly endorsing "
+        "the competitor."
+    ),
+    FindingCategory.PARTNERSHIP: (
+        "A two-way commercial, channel, implementation, or technology partnership that "
+        "is not merely "
+        "a customer purchase."
+    ),
+    FindingCategory.LEADERSHIP: (
+        "An executive or board appointment, departure, promotion, or other named leadership change."
+    ),
+    FindingCategory.HIRING: (
+        "New open roles, a material hiring push, headcount expansion, or a hiring slowdown."
+    ),
+    FindingCategory.MARKET_EXPANSION: (
+        "Entry into or withdrawal from a geography or market, including a new regional office or "
+        "localized availability."
+    ),
+    FindingCategory.OTHER: (
+        "A material competitor change that does not fit any category above; use only as "
+        "a last resort."
+    ),
+}
 
 
 class SignificanceLevel(StrEnum):

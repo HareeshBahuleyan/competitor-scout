@@ -115,3 +115,12 @@ def test_significance_is_a_closed_enum() -> None:
         FindingCandidate.model_validate_json(
             json.dumps(finding() | {"significance_level": "urgent"})
         )
+
+
+def test_retired_feature_category_is_rejected() -> None:
+    with pytest.raises(ValidationError):
+        FindingCandidate.model_validate_json(json.dumps(finding() | {"category": "feature"}))
+    with pytest.raises(ValidationError):
+        PlannedChildTask.model_validate_json(
+            json.dumps(first_party_task() | {"expected_category": "feature"})
+        )
