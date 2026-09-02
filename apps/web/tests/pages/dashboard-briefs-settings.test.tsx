@@ -160,22 +160,11 @@ describe("dashboard", () => {
     renderWithQuery(<DashboardView />);
     expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.getByText("Intelligence overview")).toBeInTheDocument();
-    expect(screen.getByText("Active monitors")).toBeInTheDocument();
-    expect(screen.getByText("Material updates")).toBeInTheDocument();
-    expect(screen.getByText("Scans to review")).toBeInTheDocument();
+    expect(screen.queryByText("Active monitors")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Add competitor" })).toHaveAttribute(
       "href",
       "/competitors/new",
     );
-    expect(screen.getByRole("link", { name: "Manage competitors" })).toHaveAttribute(
-      "href",
-      "/competitors",
-    );
-    expect(screen.getByRole("link", { name: "Browse updates" })).toHaveAttribute(
-      "href",
-      "/findings",
-    );
-    expect(screen.getByRole("link", { name: "Review scans" })).toHaveAttribute("href", "/runs");
     expect(screen.getByRole("link", { name: "Acme changed pricing" })).toHaveAttribute(
       "href",
       `/findings/${finding.id}`,
@@ -190,7 +179,7 @@ describe("dashboard", () => {
       `/competitors/${competitor.id}`,
     );
     expect(screen.getAllByText("partial").length).toBeGreaterThan(0);
-    expect(screen.getByRole("alert")).toHaveTextContent("Some research tasks could not complete.");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: brief.title })).toHaveAttribute(
       "href",
       `/briefs/${brief.id}`,

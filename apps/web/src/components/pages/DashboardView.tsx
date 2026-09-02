@@ -8,7 +8,6 @@ import { useEffect } from "react";
 import { FindingCard } from "@/components/FindingCard";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { apiGetClient } from "@/lib/api";
-import { partialReasonLabels } from "@/lib/runs";
 import {
   competitorPageSchema,
   findingPageSchema,
@@ -27,54 +26,6 @@ function latestRunFor(competitorId: string, runs: Run[]) {
   return runs
     .filter((run) => run.competitor_id === competitorId)
     .sort((left, right) => right.created_at.localeCompare(left.created_at))[0];
-}
-
-const NOTE_TONE = {
-  live: "text-[var(--color-success)]",
-  attention: "text-[var(--color-warning)]",
-  neutral: "text-slate-500",
-} as const;
-
-function StatCard({
-  action,
-  href,
-  label,
-  note,
-  tone,
-  value,
-}: {
-  action: string;
-  href: string;
-  label: string;
-  note: string;
-  tone: keyof typeof NOTE_TONE;
-  value: number;
-}) {
-  return (
-    <article className="surface surface-interactive card-target group p-4">
-      <p className="text-xs font-medium text-slate-500">{label}</p>
-      <div className="mt-2 flex items-end justify-between gap-3">
-        <p className="text-3xl font-semibold tracking-[-0.04em]">{value}</p>
-        <span className={`mb-1 flex items-center gap-1.5 text-xs ${NOTE_TONE[tone]}`}>
-          {tone === "live" ? (
-            <span aria-hidden="true" className="size-1.5 rounded-full bg-[var(--color-success)]" />
-          ) : null}
-          {note}
-        </span>
-      </div>
-      <p className="mt-3 text-xs font-semibold text-[var(--color-accent-strong)]">
-        <Link className="card-link" href={href}>
-          {action}
-          <span
-            aria-hidden="true"
-            className="ml-1 inline-block transition-transform group-hover:translate-x-0.5"
-          >
-            →
-          </span>
-        </Link>
-      </p>
-    </article>
-  );
 }
 
 export function DashboardView() {
@@ -154,9 +105,6 @@ export function DashboardView() {
   ]
     .sort((left, right) => right.published_at.localeCompare(left.published_at))
     .slice(0, 10);
-  const unhealthyRuns = runPage.items.filter(
-    (run) => run.status === "partial" || run.status === "failed",
-  );
   const latestBrief = briefPage.items[0];
 
   return (
@@ -179,63 +127,6 @@ export function DashboardView() {
           Add competitor
         </Link>
       </header>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <StatCard
-          action="Manage competitors"
-          href="/competitors"
-          label="Active monitors"
-          note="Live"
-          tone="live"
-          value={activeCompetitors.length}
-        />
-        <StatCard
-          action="Browse updates"
-          href="/findings"
-          label="Material updates"
-          note="Latest view"
-          tone="neutral"
-          value={materialFindings.length}
-        />
-        <StatCard
-          action="Review scans"
-          href="/runs"
-          label="Scans to review"
-          note={unhealthyRuns.length ? "Needs attention" : "All clear"}
-          tone={unhealthyRuns.length ? "attention" : "neutral"}
-          value={unhealthyRuns.length}
-        />
-      </div>
-
-      {unhealthyRuns.length ? (
-        <section
-          aria-labelledby="run-warnings-heading"
-          className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4"
-          role="alert"
-        >
-          <span aria-hidden="true" className="mt-0.5 text-amber-700">
-            ●
-          </span>
-          <div>
-            <h2 className="font-semibold text-amber-950" id="run-warnings-heading">
-              Some scans need attention
-            </h2>
-            <ul className="mt-1.5 space-y-1 text-sm text-amber-900">
-              {unhealthyRuns.map((run) => (
-                <li key={run.id}>
-                  <Link className="font-semibold capitalize underline" href={`/runs/${run.id}`}>
-                    {run.status} scan
-                  </Link>
-                  {run.failure_summary ? `: ${run.failure_summary}` : null}
-                  {run.partial_reasons.length
-                    ? `: ${partialReasonLabels(run.partial_reasons, run.partial_summaries).join("; ")}`
-                    : null}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
-      ) : null}
 
       <div className="grid items-start gap-7 lg:grid-cols-[minmax(0,1.7fr)_minmax(16rem,0.8fr)]">
         <section aria-labelledby="latest-findings-heading" className="space-y-4">
