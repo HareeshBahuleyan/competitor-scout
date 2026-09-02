@@ -200,6 +200,9 @@ async def test_discovery_uses_exact_hosted_tool_contract_and_filters_sources() -
         ]
     }
     run_id = uuid.uuid4()
+    configured = discovery_settings().model_copy(
+        update={"otari_firecrawl_mcp_server_id": "11111111-1111-1111-1111-111111111111"}
+    )
 
     async def transport_handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/api/v1/request-costs/req-discovery-synthetic":
@@ -214,10 +217,14 @@ async def test_discovery_uses_exact_hosted_tool_contract_and_filters_sources() -
         body = json.loads((await request.aread()).decode())
         assert body["model"] == "competitor-scout-main"
         assert body["tools"] == [{"type": "otari_web_search"}]
+        assert "mcp_server_ids" not in body
         assert body["parallel_tool_calls"] is False
         assert body["max_tool_iterations"] == 11
         assert "Make no more than 8 web search calls." in body["messages"][0]["content"]
         assert body["session_label"] == f"scout-run:{run_id}"
+        assert body["response_format"]["type"] == "json_schema"
+        assert body["response_format"]["json_schema"]["strict"] is True
+        assert request.extensions["timeout"]["read"] == 60.0
         return httpx.Response(
             200,
             json={
@@ -229,12 +236,12 @@ async def test_discovery_uses_exact_hosted_tool_contract_and_filters_sources() -
 
     validator = FakeValidator()
     async with OtariClient(
-        discovery_settings(),
+        configured,
         transport=httpx.MockTransport(transport_handler),
     ) as client:
         outcome = await SourceDiscoveryService(
             client=client,
-            settings=discovery_settings(),
+            settings=configured,
             url_validator=validator,
         ).discover(domain="acme.example", run_id=run_id)
 

@@ -84,6 +84,27 @@ async def schedule_due_daily_runs(
         if scheduled_for > current:
             continue
 
+        local_day_start = datetime.combine(local_date, time.min, tzinfo=zone).astimezone(UTC)
+        next_local_day_start = datetime.combine(
+            local_date + timedelta(days=1),
+            time.min,
+            tzinfo=zone,
+        ).astimezone(UTC)
+        successful_manual_run = await session.scalar(
+            select(ScoutRun.id)
+            .where(
+                ScoutRun.competitor_id == competitor.id,
+                ScoutRun.run_type == RunType.MANUAL_SCOUT,
+                ScoutRun.status.in_([ScoutRunStatus.COMPLETED, ScoutRunStatus.PARTIAL]),
+                ScoutRun.scheduled_for >= local_day_start,
+                ScoutRun.scheduled_for < next_local_day_start,
+                ScoutRun.scheduled_for <= current,
+            )
+            .limit(1)
+        )
+        if successful_manual_run is not None:
+            continue
+
         statement = (
             insert(ScoutRun)
             .values(

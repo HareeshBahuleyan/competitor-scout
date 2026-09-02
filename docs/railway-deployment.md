@@ -33,6 +33,8 @@ Set these on both `api` and `worker` unless noted otherwise:
 - `OTARI_CHILD_MODEL=general-mzai-then-openai-models`
 - optional `OTARI_COST_LOOKUP_ATTEMPTS` and `OTARI_COST_LOOKUP_DELAY_SECONDS`, which bound
   the settled-cost lookup described in `docs/architecture/agent-runtime.md`
+- optional `OTARI_FIRECRAWL_MCP_SERVER_ID` for one-shot first-party retrieval fallback;
+  register the Firecrawl MCP server in the same Otari workspace first
 - all documented task, deadline, concurrency, confidence, and cost-ceiling variables from `.env.example`
 
 The Otari workspace budget is configured in Otari rather than duplicated as a Railway variable. Otari enforces it for `OTARI_AI_TOKEN`; keep the application-level `MAX_RUN_COST_USD` and `MAX_USER_DAILY_COST_USD` ceilings configured as an additional guard.

@@ -24,6 +24,7 @@ TEST_ENV = {
     "OTARI_AI_TOKEN": "test-otari-token",
     "OTARI_MAIN_MODEL": "competitor-scout-main",
     "OTARI_CHILD_MODEL": "competitor-scout-child",
+    "OTARI_FIRECRAWL_MCP_SERVER_ID": "",
 }
 
 os.environ.update(TEST_ENV)
