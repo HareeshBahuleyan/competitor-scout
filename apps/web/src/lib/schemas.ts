@@ -94,7 +94,6 @@ const nullableMoneySchema = z.union([z.number(), z.string()]).transform(String).
 export const findingCategorySchema = z.enum([
   "pricing",
   "product",
-  "feature",
   "positioning",
   "integration",
   "customer_win",

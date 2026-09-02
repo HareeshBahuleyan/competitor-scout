@@ -5,8 +5,13 @@ from urllib.parse import urlsplit, urlunsplit
 
 import pytest
 
-from competitor_scout.agents.contracts import EvidenceCandidate
+from competitor_scout.agents.contracts import (
+    FINDING_CATEGORY_DEFINITIONS,
+    EvidenceCandidate,
+    FindingCategory,
+)
 from competitor_scout.agents.prompts import (
+    FINDING_CATEGORY_GUIDANCE,
     PROMPT_VERSION,
     UNTRUSTED_SOURCE_POLICY,
     child_messages,
@@ -87,6 +92,19 @@ def test_planning_prompt_explains_task_scope_invariants() -> None:
     assert "search_query to null" in system
     assert "news_discovery" in system
     assert "max_search_calls to at least 1" in system
+
+
+def test_planning_and_synthesis_prompts_share_complete_category_guidance() -> None:
+    assert set(FINDING_CATEGORY_DEFINITIONS) == set(FindingCategory)
+    for category, definition in FINDING_CATEGORY_DEFINITIONS.items():
+        assert f"- {category.value}: {definition}" in FINDING_CATEGORY_GUIDANCE
+
+    planning = planning_messages({"competitor": "Example Analytics"})[0]["content"]
+    synthesis = synthesis_messages({"validated_evidence": []})[0]["content"]
+    assert FINDING_CATEGORY_GUIDANCE in planning
+    assert FINDING_CATEGORY_GUIDANCE in synthesis
+    assert "expected_category_hint is the planner's hypothesis, not evidence" in synthesis
+    assert "feature:" not in FINDING_CATEGORY_GUIDANCE
 
 
 def test_injection_text_remains_inert_deterministically_serialized_user_data() -> None:

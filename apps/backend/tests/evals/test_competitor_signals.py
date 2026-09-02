@@ -26,11 +26,20 @@ def test_versioned_corpus_has_broad_unique_coverage() -> None:
     supported_categories = {
         case["expected_category"] for case in cases if case["expected_publish"] is True
     }
+    overlap_cases = [case for case in cases if case.get("category_overlap")]
 
     assert len(cases) >= 20
     assert len(ids) == len(set(ids))
     assert supported_categories == {category.value for category in FindingCategory}
     assert all(str(case["source_url"]).startswith("https://") for case in cases)
+    assert len(overlap_cases) >= 5
+    for case in overlap_cases:
+        overlap = case["category_overlap"]
+        assert isinstance(overlap, list)
+        assert len(set(overlap)) >= 2
+        assert case["expected_category"] in overlap
+        assert case["planner_category_hint"] in overlap
+        assert case["planner_category_hint"] != case["expected_category"]
 
 
 async def test_offline_fixture_thresholds_and_citations() -> None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import os
 import sys
@@ -76,9 +77,33 @@ async def run_case(
         max_completion_tokens=child_tokens,
         deadline_seconds=child_deadline,
     )
+    expected_category = case["expected_category"]
+    category_hint = case.get("planner_category_hint") or expected_category or "other"
+    evidence_payload = [
+        {
+            "source_url": str(item.source_url),
+            "source_title": item.source_title,
+            "source_type": item.source_type.value,
+            "quoted_text": item.quoted_text,
+            "normalized_claim": item.normalized_claim,
+            "published_at": item.published_at.isoformat() if item.published_at else None,
+            "confidence": item.confidence,
+            "fingerprint": hashlib.sha256(
+                f"{item.source_url}\n{' '.join(item.quoted_text.split())}".encode()
+            ).hexdigest(),
+            "expected_category_hint": category_hint,
+        }
+        for item in child_result.evidence
+    ]
     synthesis_result, main_metadata = await client.structured_completion(
         model=main_model,
-        messages=synthesis_messages(child_result),
+        messages=synthesis_messages(
+            {
+                "competitor": {"name": "Example", "primary_domain": "example.test"},
+                "validated_evidence": evidence_payload,
+                "recent_finding_fingerprints": [],
+            }
+        ),
         output_type=SynthesisResult,
         session_label=session_label,
         max_completion_tokens=main_tokens,
@@ -91,9 +116,8 @@ async def run_case(
         all(index < len(child_result.evidence) for index in finding.evidence_indexes)
         for finding in synthesis_result.findings
     )
-    category_correct = not expected_publish or any(
-        finding.category.value == case["expected_category"] for finding in synthesis_result.findings
-    )
+    returned_categories = [finding.category.value for finding in synthesis_result.findings]
+    category_correct = not expected_publish or returned_categories == [expected_category]
     quote_fragment = case["required_quote_fragment"]
     quote_present = quote_fragment is None or any(
         str(quote_fragment) in evidence.quoted_text for evidence in child_result.evidence
@@ -104,6 +128,8 @@ async def run_case(
         "published": published,
         "unsupported_rejected": expected_publish or not published,
         "category_correct": category_correct,
+        "category_overlap": bool(case.get("category_overlap")),
+        "returned_categories": returned_categories,
         "citation_valid": citation_valid,
         "required_quote_present": quote_present,
         "child_request_id": child_metadata.request_id,
@@ -153,6 +179,7 @@ async def run_live() -> int:
     scored = [result for result in results if "error_code" not in result]
     rejected = [result for result in scored if not result["expected_publish"]]
     supported = [result for result in scored if result["expected_publish"]]
+    overlapping = [result for result in supported if result["category_overlap"]]
     thresholds = {
         "all_cases_completed": len(scored) == len(corpus),
         "unsupported_rejection": bool(rejected)
@@ -161,6 +188,8 @@ async def run_live() -> int:
         and all(result["citation_valid"] for result in supported),
         "category_accuracy_at_least_90_percent": bool(supported)
         and sum(result["category_correct"] for result in supported) / len(supported) >= 0.9,
+        "overlapping_category_accuracy_at_least_90_percent": bool(overlapping)
+        and sum(result["category_correct"] for result in overlapping) / len(overlapping) >= 0.9,
         "required_quotes": bool(supported)
         and all(result["required_quote_present"] for result in supported),
     }

@@ -78,6 +78,12 @@ afterEach(() => {
   searchParams.current = new URLSearchParams();
 });
 
+function openSection(name: string) {
+  const disclosure = screen.getByRole("button", { name });
+  fireEvent.click(disclosure);
+  return disclosure;
+}
+
 describe("competitor pages", () => {
   it("renders loading, empty, success, and error list states", async () => {
     let resolve!: (value: unknown) => void;
@@ -355,6 +361,7 @@ describe("competitor pages", () => {
     renderWithQuery(<CompetitorDetailView competitorId={competitor.id} />);
     await screen.findByRole("heading", { name: "Acme" });
     expect(screen.getByRole("button", { name: "Run scan now" })).toBeDisabled();
+    openSection("Sources");
     fireEvent.click(screen.getByRole("button", { name: "Retry source discovery" }));
 
     await waitFor(() =>
@@ -369,6 +376,7 @@ describe("competitor pages", () => {
   });
 
   it("approves sources and activates monitoring with the authenticated CSRF token", async () => {
+    const user = userEvent.setup();
     const suggestedSource = { ...source, approval_status: "suggested" };
     vi.mocked(apiGetClient).mockImplementation(async (path) => {
       if (path === "/api/v1/me") return me as never;
@@ -383,14 +391,46 @@ describe("competitor pages", () => {
       .mockResolvedValueOnce({ ...competitor, status: "active" } as never);
     renderWithQuery(<CompetitorDetailView competitorId={competitor.id} />);
     await screen.findByRole("heading", { name: "Acme" });
-    expect(screen.getByRole("heading", { name: "Recent updates" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Recent scans" })).toBeInTheDocument();
+    const recentUpdatesHeading = screen.getByRole("heading", { name: "Recent updates" });
+    const sourcesHeading = screen.getByRole("heading", { name: "Sources" });
+    const recentScansHeading = screen.getByRole("heading", { name: "Recent scans" });
+    expect(
+      recentUpdatesHeading.compareDocumentPosition(sourcesHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      sourcesHeading.compareDocumentPosition(recentScansHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Sources" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "Recent scans" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(openSection("Recent scans")).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: "View all scans" })).toBeVisible();
     expect(screen.getByRole("form", { name: "Filter competitor updates" })).toHaveAttribute(
       "action",
       "/findings",
     );
+    await user.click(screen.getByRole("button", { name: /Category/ }));
     expect(screen.getByRole("option", { name: "customer win" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "traction" })).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    openSection("Sources");
+    expect(
+      screen.getByText("Monitor at least one trusted source before activating monitoring."),
+    ).toBeVisible();
+    const editButton = screen.getByRole("button", { name: "Edit competitor info" });
+    expect(editButton).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByLabelText("Monitor name")).not.toBeInTheDocument();
+    fireEvent.click(editButton);
+    expect(screen.getByRole("button", { name: "Hide competitor info" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
     expect(screen.getByRole("button", { name: "Resume monitoring" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Monitor Pricing" }));
     await waitFor(() =>
@@ -432,6 +472,8 @@ describe("competitor pages", () => {
 
     renderWithQuery(<CompetitorDetailView competitorId={competitor.id} />);
     await screen.findByRole("heading", { name: "Acme" });
+    expect(screen.queryByLabelText("Monitor name")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit competitor info" }));
 
     await user.clear(screen.getByLabelText("Monitor name"));
     await user.type(screen.getByLabelText("Monitor name"), "Acme Inc.");

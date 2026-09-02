@@ -113,7 +113,7 @@ describe("foundational API schemas", () => {
 
 describe("audit schemas", () => {
   it("parses finding decimals and strips unknown model fields", () => {
-    const parsed = findingSchema.parse({
+    const payload = {
       id: "55555555-5555-4555-8555-555555555555",
       competitor_id: "11111111-1111-4111-8111-111111111111",
       originating_scout_run_id: "44444444-4444-4444-8444-444444444444",
@@ -128,9 +128,11 @@ describe("audit schemas", () => {
       last_seen_at: "2026-08-21T09:00:00Z",
       published_at: "2026-08-21T09:00:00Z",
       prompt: "must be stripped",
-    });
+    };
+    const parsed = findingSchema.parse(payload);
     expect(parsed.confidence).toBe(0.91);
     expect(parsed).not.toHaveProperty("prompt");
+    expect(() => findingSchema.parse({ ...payload, category: "feature" })).toThrow(z.ZodError);
   });
 
   it("rejects unsafe evidence URLs and strips task secrets", () => {

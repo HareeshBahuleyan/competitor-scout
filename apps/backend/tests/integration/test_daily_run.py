@@ -478,6 +478,12 @@ async def test_daily_run_happy_path_is_bounded_auditable_and_publishes(daily_sto
     assert planning_call["enable_web_search"] is False
     assert synthesis_call["model"] == "competitor-scout-main"
     assert synthesis_call["enable_web_search"] is False
+    synthesis_messages_payload = synthesis_call["messages"]
+    assert isinstance(synthesis_messages_payload, list)
+    synthesis_payload = json.loads(synthesis_messages_payload[1]["content"])
+    assert {item["expected_category_hint"] for item in synthesis_payload["validated_evidence"]} == {
+        "product"
+    }
     child_calls = [call for call in fake.calls if call["output_type"] is ChildTaskResult]
     assert all(call["model"] == "competitor-scout-child" for call in child_calls)
     assert all(call["enable_web_search"] is True for call in child_calls)

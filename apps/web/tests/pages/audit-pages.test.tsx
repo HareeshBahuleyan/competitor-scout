@@ -1,4 +1,5 @@
 import { fireEvent, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -72,6 +73,7 @@ afterEach(() => vi.clearAllMocks());
 
 describe("findings pages", () => {
   it("keeps advanced filters behind an accessible disclosure", async () => {
+    const user = userEvent.setup();
     vi.mocked(apiGetClient).mockImplementation(async (path) => {
       if (path === "/api/v1/me") return me as never;
       if (path.startsWith("/api/v1/competitors"))
@@ -83,10 +85,11 @@ describe("findings pages", () => {
     renderWithQuery(<FindingsListView initialFilters={{}} />);
 
     expect(await screen.findByText("No findings match these filters.")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Category")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Category/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Filters" }));
-    expect(screen.getByLabelText("Category")).toBeVisible();
-    expect(await screen.findByRole("option", { name: "Acme" })).toHaveValue(competitor.id);
+    expect(screen.getByRole("button", { name: /Category/ })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /Competitor/ }));
+    expect(await screen.findByRole("option", { name: "Acme" })).toBeInTheDocument();
   });
 
   it("shows finding cards, filters, empty state, and errors", async () => {
@@ -112,8 +115,11 @@ describe("findings pages", () => {
       "href",
       `/findings/${finding.id}`,
     );
-    expect(screen.getByLabelText("Category")).toHaveValue("pricing");
-    expect(screen.getByLabelText("Competitor")).toHaveAttribute("name", "competitor_id");
+    expect(screen.getByRole("button", { name: /Category/ })).toHaveTextContent("pricing");
+    expect(success.container.querySelector('input[name="category"]')).toHaveValue("pricing");
+    expect(success.container.querySelector('input[name="competitor_id"]')).toHaveValue(
+      competitor.id,
+    );
     expect(screen.getByText("competitor: Acme")).toBeInTheDocument();
     expect(screen.getByLabelText("Published from")).toHaveAttribute("name", "published_from");
     expect(screen.getByLabelText("Published to")).toHaveAttribute("name", "published_to");

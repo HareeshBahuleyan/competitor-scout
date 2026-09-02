@@ -18,6 +18,7 @@ from competitor_scout.agents.contracts import (
     ChildTaskKind,
     ChildTaskResult,
     DiscoveredSource,
+    FindingCategory,
     PlannedChildTask,
     ScoutPlan,
     SourceDiscoveryResult,
@@ -178,6 +179,7 @@ class _RunContext:
 class _AcceptedEvidence:
     task_id: uuid.UUID
     evidence: NormalizedEvidence
+    expected_category: FindingCategory
 
 
 @dataclass(frozen=True)
@@ -776,7 +778,12 @@ class ScoutOrchestrator:
                 )
                 return _ChildOutcome(
                     accepted=tuple(
-                        _AcceptedEvidence(task_id=task_id, evidence=item) for item in accepted
+                        _AcceptedEvidence(
+                            task_id=task_id,
+                            evidence=item,
+                            expected_category=planned.expected_category,
+                        )
+                        for item in accepted
                     ),
                     metadata=tuple(metadata_records),
                     unsettled_attempt=unsettled,
@@ -887,6 +894,7 @@ class ScoutOrchestrator:
                 ),
                 "confidence": item.evidence.confidence,
                 "fingerprint": item.evidence.fingerprint,
+                "expected_category_hint": item.expected_category.value,
             }
             for item in accepted
         ]

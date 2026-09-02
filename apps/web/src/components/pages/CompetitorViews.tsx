@@ -13,7 +13,9 @@ import { runTypeLabel } from "@/components/RunOutcomeSummary";
 import { SetupStepper } from "@/components/SetupStepper";
 import { SourceManagementList } from "@/components/SourceManagementList";
 import { SourceSelectionList } from "@/components/SourceSelectionList";
+import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { SelectField, type SelectFieldOption } from "@/components/ui/SelectField";
 import { WorkingIndicator } from "@/components/ui/WorkingIndicator";
 import { apiGetClient, apiMutate } from "@/lib/api";
 import { meQueryOptions } from "@/lib/current-user";
@@ -36,6 +38,20 @@ import {
 } from "@/lib/schemas";
 
 const COMPETITOR_LIMIT = 10;
+
+const findingCategoryOptions: SelectFieldOption[] = [
+  { label: "All categories", value: "" },
+  ...findingCategorySchema.options.map((value) => ({
+    label: value.replaceAll("_", " "),
+    value,
+  })),
+];
+
+const findingSignificanceOptions: SelectFieldOption[] = [
+  { label: "All levels", value: "" },
+  { label: "High", value: "high" },
+  { label: "Critical", value: "critical" },
+];
 
 const competitorStatusStyles: Record<string, string> = {
   active: "bg-emerald-50 text-emerald-700",
@@ -344,7 +360,7 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
       {step === 2 ? (
         <div className="space-y-6">
           <div>
-            <h2 className="text-2xl font-semibold">Choose trusted sources</h2>
+            <h2 className="text-xl font-semibold">Choose trusted sources</h2>
             <p className="mt-1 text-slate-600">
               We only monitor first-party pages you select. You can change these later.
             </p>
@@ -447,7 +463,7 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
       ) : null}
       {step === 3 ? (
         <div className="surface max-w-2xl space-y-4 p-6">
-          <h2 className="text-2xl font-semibold">Your monitor is active</h2>
+          <h2 className="text-xl font-semibold">Your monitor is active</h2>
           {firstScanRunId && !terminalStatuses.has(firstScan.data?.status ?? "") ? (
             <WorkingIndicator
               hint="You can leave this page — the scan keeps running"
@@ -487,6 +503,7 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
 export function CompetitorDetailView({ competitorId }: { competitorId: string }) {
   const client = useQueryClient();
   const router = useRouter();
+  const [competitorInfoOpen, setCompetitorInfoOpen] = useState(false);
   const [pendingSourceId, setPendingSourceId] = useState<string | null>(null);
   const [manualSourceUrl, setManualSourceUrl] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
@@ -655,40 +672,52 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
         )}
       </p>
     );
-  const hasApproved = sources.data.items.some((item) => item.approval_status === "approved");
+  const monitoredSourceCount = sources.data.items.filter(
+    (item) => item.approval_status === "approved",
+  ).length;
+  const hasApproved = monitoredSourceCount > 0;
   return (
     <article className="space-y-10">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="eyebrow">{competitor.data.status}</p>
-          <div className="mt-1 flex items-center gap-3">
-            <CompetitorFavicon
-              domain={competitor.data.primary_domain}
-              name={competitor.data.name}
-              size="lg"
-            />
-            <h1 className="text-4xl font-semibold">{competitor.data.name}</h1>
+      <header>
+        <p className="eyebrow">{competitor.data.status}</p>
+        <div className="mt-1 flex items-center gap-3">
+          <CompetitorFavicon
+            domain={competitor.data.primary_domain}
+            name={competitor.data.name}
+            size="lg"
+          />
+          <h1 className="text-4xl font-semibold">{competitor.data.name}</h1>
+        </div>
+        <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <p className="min-w-0 flex-1 text-slate-600">{competitor.data.description}</p>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <button
+              className="rounded-lg border border-slate-300 px-4 py-2 font-medium disabled:text-slate-400"
+              disabled={!hasApproved || competitor.data.status !== "active" || runNow.isPending}
+              onClick={() => runNow.mutate()}
+              type="button"
+            >
+              Run scan now
+            </button>
+            <button
+              aria-controls="competitor-info-settings"
+              aria-expanded={competitorInfoOpen}
+              className="rounded-lg border border-slate-300 px-4 py-2 font-medium"
+              onClick={() => setCompetitorInfoOpen((open) => !open)}
+              type="button"
+            >
+              {competitorInfoOpen ? "Hide competitor info" : "Edit competitor info"}
+            </button>
           </div>
-          <p className="mt-2 text-slate-600">{competitor.data.description}</p>
-          <a
-            className="section-link mt-2 inline-block"
-            href={`https://${competitor.data.primary_domain}`}
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            {competitor.data.primary_domain}
-          </a>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            className="rounded-lg border border-slate-300 px-4 py-2 font-medium disabled:text-slate-400"
-            disabled={!hasApproved || competitor.data.status !== "active" || runNow.isPending}
-            onClick={() => runNow.mutate()}
-            type="button"
-          >
-            Run scan now
-          </button>
-        </div>
+        <a
+          className="section-link mt-2 inline-block"
+          href={`https://${competitor.data.primary_domain}`}
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          {competitor.data.primary_domain}
+        </a>
       </header>
       {discoveryNotice || notice ? <p role="status">{discoveryNotice || notice}</p> : null}
       {sourceUpdate.isError ||
@@ -706,85 +735,26 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
           )}
         </p>
       ) : null}
-      <MonitorSettings
-        competitor={competitor.data}
-        hasApprovedSource={hasApproved}
-        isPending={updateMonitor.isPending || archiveMonitor.isPending}
-        onArchive={async () => {
-          await archiveMonitor.mutateAsync();
-        }}
-        onSave={async (values) => {
-          await updateMonitor.mutateAsync(values);
-        }}
-        onStatusChange={async (status) => {
-          await updateMonitor.mutateAsync({ status });
-        }}
-      />
-      {sources.data.items.length ? (
-        <div className="space-y-6">
-          <SourceManagementList
-            disabled={sourceUpdate.isPending}
-            onUpdate={(sourceId, approval_status) =>
-              sourceUpdate.mutateAsync({ sourceId, approval_status }).then(() => undefined)
-            }
-            pendingSourceId={pendingSourceId}
-            sources={sources.data.items}
-          />
-          <form
-            aria-label="Add a source"
-            className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-end"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (manualSourceUrl.trim()) addSource.mutate();
+      {competitorInfoOpen ? (
+        <div id="competitor-info-settings">
+          <MonitorSettings
+            competitor={competitor.data}
+            hasApprovedSource={hasApproved}
+            isPending={updateMonitor.isPending || archiveMonitor.isPending}
+            onArchive={async () => {
+              await archiveMonitor.mutateAsync();
             }}
-          >
-            <label className="field-label min-w-0 flex-1">
-              Add a first-party source
-              <input
-                aria-describedby="add-source-help"
-                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2"
-                disabled={addSource.isPending}
-                onChange={(event) => setManualSourceUrl(event.target.value)}
-                placeholder={`https://${competitor.data.primary_domain}/changelog`}
-                type="url"
-                value={manualSourceUrl}
-              />
-            </label>
-            <button
-              className="rounded-lg border border-slate-300 px-4 py-2 font-medium disabled:text-slate-400"
-              disabled={!manualSourceUrl.trim() || addSource.isPending}
-              type="submit"
-            >
-              {addSource.isPending ? "Adding…" : "Add source"}
-            </button>
-          </form>
-          <p className="text-sm text-slate-600" id="add-source-help">
-            A new source waits under Awaiting review until you monitor it.
-          </p>
-          {addSource.isError ? (
-            <p className="text-red-700" role="alert">
-              {errorText(addSource.error)}
-            </p>
-          ) : null}
+            onSave={async (values) => {
+              await updateMonitor.mutateAsync(values);
+            }}
+            onStatusChange={async (status) => {
+              await updateMonitor.mutateAsync({ status });
+            }}
+          />
         </div>
-      ) : (
-        <div className="space-y-3">
-          <p>No sources have been discovered.</p>
-          <button
-            className="rounded-lg border border-slate-300 px-4 py-2 font-medium disabled:text-slate-400"
-            disabled={discovery.isPending || (Boolean(discoveryRunId) && !discoveryFinished)}
-            onClick={() => discovery.mutate()}
-            type="button"
-          >
-            Retry source discovery
-          </button>
-        </div>
-      )}
-      <section className="space-y-4" aria-labelledby="recent-findings-heading">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold" id="recent-findings-heading">
-            Recent updates
-          </h2>
+      ) : null}
+      <CollapsibleSection defaultOpen id="recent-findings" title="Recent updates">
+        <div className="flex justify-end">
           <Link className="section-link" href={`/findings?competitor_id=${competitorId}`}>
             View all updates
           </Link>
@@ -792,39 +762,32 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
         <form
           action="/findings"
           aria-label="Filter competitor updates"
-          className="surface grid gap-3 p-4 sm:grid-cols-4"
+          className="surface grid gap-4 p-4 sm:grid-cols-3"
           method="get"
         >
           <input name="competitor_id" type="hidden" value={competitorId} />
-          <label className="text-sm font-medium">
-            Category
-            <select className="select-control mt-1" name="category">
-              <option value="">All categories</option>
-              {findingCategorySchema.options.map((category) => (
-                <option key={category} value={category}>
-                  {category.replaceAll("_", " ")}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm font-medium">
-            Significance
-            <select className="select-control mt-1" name="significance">
-              <option value="">All levels</option>
-              <option value="high">High</option>
-              <option value="critical">Critical</option>
-            </select>
-          </label>
+          <SelectField
+            id="competitor-category-filter"
+            label="Category"
+            name="category"
+            options={findingCategoryOptions}
+          />
+          <SelectField
+            id="competitor-significance-filter"
+            label="Significance"
+            name="significance"
+            options={findingSignificanceOptions}
+          />
           <label className="text-sm font-medium">
             Published from
             <input
-              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2"
+              className="mt-1 block min-h-10 w-full rounded-lg border border-slate-300 px-3 py-2"
               name="published_from"
               type="date"
             />
           </label>
           <button
-            className="self-end rounded-lg bg-slate-950 px-4 py-2 font-medium text-white"
+            className="rounded-lg bg-slate-950 px-4 py-2 font-medium text-white sm:col-span-3 sm:justify-self-start"
             type="submit"
           >
             Filter updates
@@ -839,12 +802,76 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
         ) : (
           <p className="text-sm text-slate-600">No updates for this competitor yet.</p>
         )}
-      </section>
-      <section className="space-y-4" aria-labelledby="recent-runs-heading">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold" id="recent-runs-heading">
-            Recent scans
-          </h2>
+      </CollapsibleSection>
+      <CollapsibleSection id="competitor-sources" title="Sources">
+        <p className="text-sm text-slate-600" role="status">
+          {monitoredSourceCount
+            ? `Scans use ${monitoredSourceCount} monitored ${monitoredSourceCount === 1 ? "source" : "sources"}.`
+            : "Monitor at least one trusted source before activating monitoring."}
+        </p>
+        {sources.data.items.length ? (
+          <div className="space-y-6">
+            <SourceManagementList
+              disabled={sourceUpdate.isPending}
+              onUpdate={(sourceId, approval_status) =>
+                sourceUpdate.mutateAsync({ sourceId, approval_status }).then(() => undefined)
+              }
+              pendingSourceId={pendingSourceId}
+              sources={sources.data.items}
+            />
+            <form
+              aria-label="Add a source"
+              className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-end"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (manualSourceUrl.trim()) addSource.mutate();
+              }}
+            >
+              <label className="field-label min-w-0 flex-1">
+                Add a first-party source
+                <input
+                  aria-describedby="add-source-help"
+                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2"
+                  disabled={addSource.isPending}
+                  onChange={(event) => setManualSourceUrl(event.target.value)}
+                  placeholder={`https://${competitor.data.primary_domain}/changelog`}
+                  type="url"
+                  value={manualSourceUrl}
+                />
+              </label>
+              <button
+                className="rounded-lg border border-slate-300 px-4 py-2 font-medium disabled:text-slate-400"
+                disabled={!manualSourceUrl.trim() || addSource.isPending}
+                type="submit"
+              >
+                {addSource.isPending ? "Adding…" : "Add source"}
+              </button>
+            </form>
+            <p className="text-sm text-slate-600" id="add-source-help">
+              A new source waits under Awaiting review until you monitor it.
+            </p>
+            {addSource.isError ? (
+              <p className="text-red-700" role="alert">
+                {errorText(addSource.error)}
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p>No sources have been discovered.</p>
+            <button
+              className="rounded-lg border border-slate-300 px-4 py-2 font-medium disabled:text-slate-400"
+              disabled={discovery.isPending || (Boolean(discoveryRunId) && !discoveryFinished)}
+              onClick={() => discovery.mutate()}
+              type="button"
+            >
+              Retry source discovery
+            </button>
+          </div>
+        )}
+      </CollapsibleSection>
+      <CollapsibleSection id="recent-runs" title="Recent scans">
+        <div className="flex justify-end">
           <Link className="section-link" href={`/runs?competitor_id=${competitorId}`}>
             View all scans
           </Link>
@@ -874,7 +901,7 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
         ) : (
           <p className="text-sm text-slate-600">No scans for this competitor yet.</p>
         )}
-      </section>
+      </CollapsibleSection>
     </article>
   );
 }

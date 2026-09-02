@@ -65,18 +65,7 @@ export function SourceManagementList({
   ].filter((group) => group.sources.length > 0);
 
   return (
-    <section aria-labelledby="competitor-sources-heading" className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold" id="competitor-sources-heading">
-          Sources
-        </h2>
-        <p className="mt-1 text-sm text-slate-600" role="status">
-          {monitored.length
-            ? `Scans use ${monitored.length} monitored ${monitored.length === 1 ? "source" : "sources"}.`
-            : "Monitor at least one trusted source before activating monitoring."}
-        </p>
-      </div>
-
+    <div className="space-y-6">
       {groups.map((group) => (
         <div className="space-y-3" key={group.id}>
           <div>
@@ -201,6 +190,6 @@ export function SourceManagementList({
           </ul>
         </div>
       ))}
-    </section>
+    </div>
   );
 }

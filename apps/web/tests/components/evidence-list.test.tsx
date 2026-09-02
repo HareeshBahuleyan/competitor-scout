@@ -47,6 +47,27 @@ describe("EvidenceList", () => {
     expect(pricingLink).toHaveAttribute("rel", expect.stringContaining("noreferrer"));
   });
 
+  it("renders the same cited link only once", () => {
+    render(
+      <EvidenceList
+        evidence={[
+          {
+            ...pricingEvidence,
+            id: "267c7cba-c905-481d-a066-2721e03946b8",
+            citation_order: 2,
+            source_title: "Pricing page duplicate",
+            quoted_text: "A second excerpt from the same page.",
+          },
+          pricingEvidence,
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByRole("link", { name: /Pricing page/ })).toHaveLength(1);
+    expect(screen.getByRole("link", { name: /Pricing page/ })).toHaveTextContent("Pricing page");
+    expect(screen.queryByText("Pricing page duplicate")).not.toBeInTheDocument();
+  });
+
   it("does not make a non-HTTPS source URL clickable", () => {
     render(
       <EvidenceList

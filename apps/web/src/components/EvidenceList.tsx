@@ -24,9 +24,16 @@ function safeHttpsUrl(value: string) {
 }
 
 export function EvidenceList({ evidence }: EvidenceListProps) {
-  const orderedEvidence = [...evidence].sort(
-    (first, second) => first.citation_order - second.citation_order,
-  );
+  const seenSourceUrls = new Set<string>();
+  const orderedEvidence = [...evidence]
+    .sort((first, second) => first.citation_order - second.citation_order)
+    .filter((item) => {
+      const sourceUrl = safeHttpsUrl(item.source_url);
+      if (!sourceUrl) return true;
+      if (seenSourceUrls.has(sourceUrl)) return false;
+      seenSourceUrls.add(sourceUrl);
+      return true;
+    });
 
   return (
     <section aria-labelledby="evidence-heading" className="space-y-4">
