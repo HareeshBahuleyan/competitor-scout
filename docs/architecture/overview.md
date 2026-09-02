@@ -32,6 +32,8 @@ Errors use `application/problem+json` with a safe detail and request ID. Authent
 
 API operations and the scheduler create durable rows in the PostgreSQL job table. Worker executors claim jobs with expiring leases, renew the lease while a handler runs, and mark the job complete or failed. The main job types are source discovery, daily/manual Scout Runs, and weekly briefs.
 
+After a competitor's daily time passes, the scheduler treats a completed or partial manual Scout Run from the same user-local calendar day as satisfying that day's cadence. A failed manual run does not suppress the scheduled daily run.
+
 The database is both the source of truth and the coordination point. Job payloads carry identifiers; handlers reload current state before acting.
 
 ## Trust boundaries

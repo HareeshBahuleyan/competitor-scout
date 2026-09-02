@@ -1283,3 +1283,65 @@ async def test_scheduler_enqueues_dst_fallback_only_once(daily_store) -> None:
     assert len(first) == 1 and len(second) == 1
     assert first[0].id == second[0].id
     assert run_count == 1 and job_count >= 1
+
+
+@pytest.mark.parametrize(
+    ("manual_status", "manual_scheduled_for", "expected_daily_runs"),
+    [
+        (ScoutRunStatus.COMPLETED, datetime(2026, 8, 20, 23, 30, tzinfo=UTC), 0),
+        (ScoutRunStatus.PARTIAL, datetime(2026, 8, 20, 23, 30, tzinfo=UTC), 0),
+        (ScoutRunStatus.FAILED, datetime(2026, 8, 20, 23, 30, tzinfo=UTC), 1),
+        (ScoutRunStatus.COMPLETED, datetime(2026, 8, 20, 21, 30, tzinfo=UTC), 1),
+    ],
+)
+async def test_scheduler_counts_successful_manual_run_for_user_local_day(
+    daily_store,
+    manual_status: ScoutRunStatus,
+    manual_scheduled_for: datetime,
+    expected_daily_runs: int,
+) -> None:
+    sessions = daily_store
+    async with sessions.begin() as session:
+        user = User(
+            email=f"manual-cadence-{uuid.uuid4().hex}@example.com",
+            display_name="Manual Cadence Owner",
+            timezone="Europe/Berlin",
+        )
+        competitor = Competitor(
+            user=user,
+            name="Manual Cadence Acme",
+            primary_domain=f"manual-cadence-{uuid.uuid4().hex}.example",
+            status=CompetitorStatus.ACTIVE,
+            daily_run_time_local=time(8, 0),
+        )
+        session.add_all([user, competitor])
+        await session.flush()
+        session.add(
+            ScoutRun(
+                user_id=user.id,
+                competitor_id=competitor.id,
+                run_type=RunType.MANUAL_SCOUT,
+                status=manual_status,
+                scheduled_for=manual_scheduled_for,
+                started_at=manual_scheduled_for,
+                completed_at=manual_scheduled_for.replace(minute=40),
+            )
+        )
+
+    async with sessions.begin() as session:
+        scheduled = await schedule_due_daily_runs(
+            session,
+            now=datetime(2026, 8, 21, 7, 30, tzinfo=UTC),
+        )
+
+    async with sessions() as session:
+        daily_run_count = await session.scalar(
+            select(func.count(ScoutRun.id)).where(
+                ScoutRun.competitor_id == competitor.id,
+                ScoutRun.run_type == RunType.DAILY_SCOUT,
+            )
+        )
+
+    scheduled_target = any(run.competitor_id == competitor.id for run in scheduled)
+    assert scheduled_target is bool(expected_daily_runs)
+    assert daily_run_count == expected_daily_runs
