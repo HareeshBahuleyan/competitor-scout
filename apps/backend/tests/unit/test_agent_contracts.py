@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from competitor_scout.agents.contracts import (
     ChildTaskKind,
     FindingCandidate,
+    InitialSynthesisResult,
     PlannedChildTask,
     ScoutPlan,
 )
@@ -114,6 +115,63 @@ def test_significance_is_a_closed_enum() -> None:
     with pytest.raises(ValidationError):
         FindingCandidate.model_validate_json(
             json.dumps(finding() | {"significance_level": "urgent"})
+        )
+
+
+def snapshot() -> dict[str, object]:
+    return {
+        "executive_summary": "Acme sells analytics software to product teams.",
+        "sections": [
+            {
+                "topic": "positioning",
+                "narrative": "Acme positions the product around product analytics.",
+                "references": [
+                    {
+                        "evidence_id": "11111111-1111-1111-1111-111111111111",
+                        "statement": "The homepage names product teams as its audience.",
+                    }
+                ],
+            }
+        ],
+    }
+
+
+def test_initial_synthesis_requires_a_grounded_snapshot() -> None:
+    result = InitialSynthesisResult.model_validate_json(
+        json.dumps({"findings": [], "starting_snapshot": snapshot()})
+    )
+
+    assert result.starting_snapshot.sections[0].topic.value == "positioning"
+
+
+@pytest.mark.parametrize(
+    "invalid_snapshot",
+    [
+        snapshot() | {"sections": []},
+        snapshot()
+        | {
+            "sections": [
+                snapshot()["sections"][0],  # type: ignore[index]
+                snapshot()["sections"][0],  # type: ignore[index]
+            ]
+        },
+        snapshot()
+        | {
+            "sections": [
+                {
+                    **snapshot()["sections"][0],  # type: ignore[index]
+                    "references": [],
+                }
+            ]
+        },
+    ],
+)
+def test_initial_synthesis_rejects_empty_or_duplicate_snapshot_content(
+    invalid_snapshot: dict[str, object],
+) -> None:
+    with pytest.raises(ValidationError):
+        InitialSynthesisResult.model_validate_json(
+            json.dumps({"findings": [], "starting_snapshot": invalid_snapshot})
         )
 
 

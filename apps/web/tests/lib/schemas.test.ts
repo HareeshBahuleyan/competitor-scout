@@ -15,6 +15,7 @@ import {
   runSchema,
   sourcePageSchema,
   sourceSchema,
+  startingSnapshotSchema,
 } from "@/lib/schemas";
 
 describe("foundational API schemas", () => {
@@ -76,6 +77,7 @@ describe("foundational API schemas", () => {
       daily_run_time_local: "08:30:00",
       created_at: "2026-08-21T08:00:00Z",
       updated_at: "2026-08-21T08:05:00+00:00",
+      starting_snapshot_requested_at: null,
     };
 
     expect(competitorSchema.parse(competitor)).toEqual(competitor);
@@ -206,7 +208,44 @@ describe("audit schemas", () => {
   });
 });
 
-describe("brief, settings, and aggregate usage schemas", () => {
+describe("snapshot, brief, settings, and aggregate usage schemas", () => {
+  it("parses a grounded Starting Snapshot", () => {
+    const parsed = startingSnapshotSchema.parse({
+      id: "11111111-1111-4111-8111-111111111111",
+      competitor_id: "22222222-2222-4222-8222-222222222222",
+      competitor_name: "Acme",
+      scout_run_id: "33333333-3333-4333-8333-333333333333",
+      executive_summary: "Acme serves product teams.",
+      sections: [
+        {
+          topic: "positioning",
+          narrative: "Acme positions its product for product teams.",
+          references: [
+            {
+              evidence_id: "44444444-4444-4444-8444-444444444444",
+              statement: "The homepage names product teams.",
+              source_title: "Acme homepage",
+              source_url: "https://acme.example/",
+              quoted_text: "Built for product teams.",
+              captured_at: "2026-08-21T08:00:00Z",
+            },
+          ],
+        },
+      ],
+      coverage: {
+        approved_source_count: 1,
+        inspected_source_count: 1,
+        uninspected_source_count: 0,
+        inspected_source_categories: ["homepage"],
+        coverage_complete: true,
+      },
+      published_at: "2026-08-21T08:00:00Z",
+      created_at: "2026-08-21T08:00:00Z",
+    });
+
+    expect(parsed.sections[0].references[0].source_url).toBe("https://acme.example/");
+  });
+
   it("validates grounded and deterministic empty weekly briefs", () => {
     const base = {
       id: "88888888-8888-4888-8888-888888888888",

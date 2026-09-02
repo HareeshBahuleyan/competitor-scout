@@ -19,9 +19,11 @@ from competitor_scout.agents.contracts import (
     ChildTaskResult,
     DiscoveredSource,
     FindingCategory,
+    InitialSynthesisResult,
     PlannedChildTask,
     ScoutPlan,
     SourceDiscoveryResult,
+    StartingSnapshotCandidate,
     SynthesisResult,
 )
 from competitor_scout.agents.costs import CostEstimateRole
@@ -29,6 +31,7 @@ from competitor_scout.agents.prompts import (
     PROMPT_VERSION,
     UNTRUSTED_SOURCE_POLICY,
     child_messages,
+    initial_synthesis_messages,
     planning_messages,
     synthesis_messages,
 )
@@ -44,14 +47,18 @@ from competitor_scout.models.intelligence import (
     Competitor,
     CompetitorStatus,
     EvidenceItem,
+    EvidenceObservation,
     Finding,
     MonitoredSource,
     RunType,
     ScoutRun,
     ScoutRunStatus,
+    SourceCategory,
     UsageEvent,
 )
+from competitor_scout.models.snapshots import CompetitorStartingSnapshot
 from competitor_scout.schemas.findings import EvidencePublication, FindingPublication
+from competitor_scout.schemas.snapshots import SnapshotCoverage
 from competitor_scout.security.urls import (
     UnsafeSourceUrl,
     same_registrable_domain,
@@ -62,6 +69,19 @@ from competitor_scout.services.findings import PublicationValidationError, publi
 type UrlValidator = Callable[[str], Awaitable[str]]
 type Sleeper = Callable[[float], Awaitable[None]]
 type CostEstimator = Callable[[CostEstimateRole], Decimal | None]
+
+
+class SnapshotPublisher(Protocol):
+    async def publish(
+        self,
+        *,
+        user_id: uuid.UUID,
+        competitor_id: uuid.UUID,
+        scout_run_id: uuid.UUID,
+        snapshot: StartingSnapshotCandidate,
+        coverage: SnapshotCoverage,
+        published_at: datetime,
+    ) -> object: ...
 
 
 class FindingPublisher(Protocol):
@@ -183,6 +203,8 @@ class _RunContext:
     competitor_description: str
     competitor_domain: str
     approved_urls: tuple[str, ...]
+    approved_source_categories: tuple[tuple[str, SourceCategory], ...]
+    initial_snapshot_required: bool
     recent_findings: tuple[dict[str, object], ...]
     last_run_summary: dict[str, object] | None
     planner_task_id: uuid.UUID
@@ -199,6 +221,7 @@ class _AcceptedEvidence:
 @dataclass(frozen=True)
 class _ChildOutcome:
     accepted: tuple[_AcceptedEvidence, ...] = ()
+    inspected_urls: tuple[str, ...] = ()
     metadata: tuple[OtariMetadata, ...] = ()
     failed: bool = False
     unsettled_attempt: bool = False
@@ -213,6 +236,7 @@ class ScoutOrchestrator:
         client: OtariClient,
         settings: Settings,
         publisher: FindingPublisher,
+        snapshot_publisher: SnapshotPublisher | None = None,
         url_validator: UrlValidator = validate_public_https_url,
         now: Callable[[], datetime] | None = None,
         sleep: Sleeper | None = None,
@@ -222,6 +246,7 @@ class ScoutOrchestrator:
         self._client = client
         self._settings = settings
         self._publisher = publisher
+        self._snapshot_publisher = snapshot_publisher
         self._url_validator = url_validator
         self._now = now or (lambda: datetime.now(UTC))
         self._sleep = sleep or asyncio.sleep
@@ -284,7 +309,7 @@ class ScoutOrchestrator:
                 break
         child_failed = any(outcome.failed for outcome in outcomes)
         accepted = self._deduplicate_evidence(outcomes)
-        await self._persist_evidence(context, accepted)
+        evidence_ids = await self._persist_evidence(context, accepted)
         await self._apply_usage(run_id, usage)
         if not accepted:
             if budget_stopped:
@@ -307,12 +332,18 @@ class ScoutOrchestrator:
             )
             return ScoutRunStatus.PARTIAL
 
-        synthesis = await self._synthesize(context, accepted, usage)
+        synthesis = await self._synthesize(context, accepted, evidence_ids, usage)
         if synthesis is None:
             await self._apply_usage(run_id, usage)
             return await self._run_status(run_id)
         try:
-            await self._publish(context, synthesis, accepted)
+            await self._publish(
+                context,
+                synthesis,
+                accepted,
+                evidence_ids,
+                self._snapshot_coverage(context, outcomes),
+            )
         except Exception:
             await self._fail_run(run_id, "publication_failed", usage)
             return ScoutRunStatus.FAILED
@@ -376,10 +407,10 @@ class ScoutOrchestrator:
                 run.failure_summary = "daily settled-cost limit reached"
                 run.completed_at = now
                 return None
-            approved_urls = tuple(
+            approved_source_rows = tuple(
                 (
-                    await session.scalars(
-                        select(MonitoredSource.normalized_url)
+                    await session.execute(
+                        select(MonitoredSource.normalized_url, MonitoredSource.source_category)
                         .where(
                             MonitoredSource.competitor_id == competitor.id,
                             MonitoredSource.approval_status == ApprovalStatus.APPROVED,
@@ -388,6 +419,15 @@ class ScoutOrchestrator:
                         .limit(160)
                     )
                 ).all()
+            )
+            approved_urls = tuple(url for url, _category in approved_source_rows)
+            snapshot_exists = await session.scalar(
+                select(CompetitorStartingSnapshot.id).where(
+                    CompetitorStartingSnapshot.competitor_id == competitor.id
+                )
+            )
+            initial_snapshot_required = (
+                competitor.starting_snapshot_requested_at is not None and snapshot_exists is None
             )
             recent_finding_rows = list(
                 (
@@ -465,6 +505,8 @@ class ScoutOrchestrator:
                 competitor_description=competitor.description,
                 competitor_domain=competitor.primary_domain,
                 approved_urls=approved_urls,
+                approved_source_categories=approved_source_rows,
+                initial_snapshot_required=initial_snapshot_required,
                 recent_findings=recent_findings,
                 last_run_summary=last_run_summary,
                 planner_task_id=planner.id,
@@ -540,6 +582,11 @@ class ScoutOrchestrator:
                 "primary_domain": context.competitor_domain,
             },
             "approved_first_party_urls": list(context.approved_urls),
+            "approved_source_categories": [
+                {"url": url, "category": category.value}
+                for url, category in context.approved_source_categories
+            ],
+            "initial_snapshot_required": context.initial_snapshot_required,
             "allowed_task_kinds": [kind.value for kind in ChildTaskKind],
             "limits": {
                 "max_tasks": self._settings.max_child_tasks_per_run,
@@ -749,9 +796,10 @@ class ScoutOrchestrator:
                         and metadata.usage.tool_calls > planned.max_search_calls
                     ):
                         raise PlanValidationError("child_tool_budget_exceeded")
-                    inspection_complete = await self._validate_child_inspection_scope(
-                        planned, result
-                    )
+                    (
+                        inspected_urls,
+                        inspection_complete,
+                    ) = await self._validate_child_inspection_scope(planned, result)
                     accepted, rejected = await validate_evidence_scope(
                         result.evidence,
                         approved_urls=(str(url) for url in planned.source_urls),
@@ -886,6 +934,7 @@ class ScoutOrchestrator:
                         )
                         for item in accepted
                     ),
+                    inspected_urls=inspected_urls,
                     metadata=tuple(metadata_records),
                     unsettled_attempt=unsettled,
                 )
@@ -895,15 +944,16 @@ class ScoutOrchestrator:
         self,
         planned: PlannedChildTask,
         result: ChildTaskResult,
-    ) -> bool:
+    ) -> tuple[tuple[str, ...], bool]:
         try:
             inspected = {await self._url_validator(str(url)) for url in result.sources_inspected}
+            inspection_complete = True
             if planned.kind is ChildTaskKind.FIRST_PARTY_SOURCE_REVIEW:
                 approved = {await self._url_validator(str(url)) for url in planned.source_urls}
                 if not inspected.issubset(approved):
                     raise PlanValidationError("child_source_scope_violated")
-                return inspected == approved
-            return True
+                inspection_complete = inspected == approved
+            return tuple(sorted(inspected)), inspection_complete
         except PlanValidationError:
             raise
         except (UnsafeSourceUrl, TypeError, ValueError) as error:
@@ -928,12 +978,13 @@ class ScoutOrchestrator:
         self,
         context: _RunContext,
         accepted: Sequence[_AcceptedEvidence],
-    ) -> None:
+    ) -> tuple[uuid.UUID, ...]:
         captured_at = self._current_time()
+        evidence_ids: list[uuid.UUID] = []
         async with self._sessions.begin() as session:
             for item in accepted:
                 evidence = item.evidence
-                await session.execute(
+                statement = (
                     insert(EvidenceItem)
                     .values(
                         user_id=context.user_id,
@@ -953,20 +1004,47 @@ class ScoutOrchestrator:
                     .on_conflict_do_nothing(
                         constraint="uq_evidence_items_competitor_source_fingerprint"
                     )
+                    .returning(EvidenceItem.id)
                 )
+                evidence_id = await session.scalar(statement)
+                if evidence_id is None:
+                    evidence_id = await session.scalar(
+                        select(EvidenceItem.id).where(
+                            EvidenceItem.user_id == context.user_id,
+                            EvidenceItem.competitor_id == context.competitor_id,
+                            EvidenceItem.source_url == evidence.source_url,
+                            EvidenceItem.content_fingerprint == evidence.fingerprint,
+                        )
+                    )
+                if evidence_id is None:
+                    raise RuntimeError("persisted evidence could not be resolved")
+                await session.execute(
+                    insert(EvidenceObservation)
+                    .values(
+                        scout_run_id=context.run_id,
+                        evidence_item_id=evidence_id,
+                        agent_task_id=item.task_id,
+                        observed_at=captured_at,
+                    )
+                    .on_conflict_do_nothing()
+                )
+                evidence_ids.append(evidence_id)
+        return tuple(evidence_ids)
 
     async def _synthesize(
         self,
         context: _RunContext,
         accepted: Sequence[_AcceptedEvidence],
+        evidence_ids: Sequence[uuid.UUID],
         usage: _UsageAccumulator,
-    ) -> SynthesisResult | None:
+    ) -> SynthesisResult | InitialSynthesisResult | None:
         task_id = await self._create_synthesis_task(context)
         try:
             return await self._synthesize_within_deadline(
                 context,
                 task_id,
                 accepted,
+                evidence_ids,
                 usage,
             )
         except TimeoutError:
@@ -980,10 +1058,12 @@ class ScoutOrchestrator:
         context: _RunContext,
         task_id: uuid.UUID,
         accepted: Sequence[_AcceptedEvidence],
+        evidence_ids: Sequence[uuid.UUID],
         usage: _UsageAccumulator,
-    ) -> SynthesisResult | None:
+    ) -> SynthesisResult | InitialSynthesisResult | None:
         evidence_payload = [
             {
+                "evidence_id": str(evidence_id),
                 "source_url": item.evidence.source_url,
                 "source_title": item.evidence.source_title,
                 "source_type": item.evidence.source_type.value,
@@ -998,9 +1078,12 @@ class ScoutOrchestrator:
                 "fingerprint": item.evidence.fingerprint,
                 "expected_category_hint": item.expected_category.value,
             }
-            for item in accepted
+            for item, evidence_id in zip(accepted, evidence_ids, strict=True)
         ]
-        messages = synthesis_messages(
+        message_factory = (
+            initial_synthesis_messages if context.initial_snapshot_required else synthesis_messages
+        )
+        messages = message_factory(
             {
                 "competitor": {
                     "name": context.competitor_name,
@@ -1017,7 +1100,7 @@ class ScoutOrchestrator:
             and self._estimated_tokens(messages) > self._settings.main_input_token_limit
         ):
             evidence_payload.pop()
-            messages = synthesis_messages(
+            messages = message_factory(
                 {
                     "competitor": {
                         "name": context.competitor_name,
@@ -1054,7 +1137,11 @@ class ScoutOrchestrator:
                 result, metadata = await self._client.structured_completion(
                     model=self._settings.otari_main_model,
                     messages=messages,
-                    output_type=SynthesisResult,
+                    output_type=(
+                        InitialSynthesisResult
+                        if context.initial_snapshot_required
+                        else SynthesisResult
+                    ),
                     session_label=scout_run_session_label(context.run_id),
                     max_completion_tokens=self._settings.main_output_token_limit,
                     deadline_seconds=self._settings.synthesis_deadline_seconds,
@@ -1102,9 +1189,15 @@ class ScoutOrchestrator:
                 scout_run_id=context.run_id,
                 parent_task_id=context.planner_task_id,
                 role=AgentTaskRole.MAIN_SYNTHESIZER,
-                task_kind="daily_synthesis",
+                task_kind=(
+                    "initial_synthesis" if context.initial_snapshot_required else "daily_synthesis"
+                ),
                 model=self._settings.otari_main_model,
-                objective="Synthesize validated evidence into publishable findings",
+                objective=(
+                    "Create a grounded Starting Snapshot and publishable findings"
+                    if context.initial_snapshot_required
+                    else "Synthesize validated evidence into publishable findings"
+                ),
                 source_scope=[],
                 status=AgentTaskStatus.RUNNING,
                 started_at=self._current_time(),
@@ -1113,13 +1206,59 @@ class ScoutOrchestrator:
             await session.flush()
             return task.id
 
+    @staticmethod
+    def _snapshot_coverage(
+        context: _RunContext,
+        outcomes: Sequence[_ChildOutcome],
+    ) -> SnapshotCoverage:
+        approved = set(context.approved_urls)
+        inspected = {
+            url for outcome in outcomes if not outcome.failed for url in outcome.inspected_urls
+        } & approved
+        category_by_url = dict(context.approved_source_categories)
+        inspected_categories = sorted(
+            {category_by_url[url] for url in inspected if url in category_by_url},
+            key=lambda category: category.value,
+        )
+        uninspected_count = len(approved - inspected)
+        return SnapshotCoverage(
+            approved_source_count=len(approved),
+            inspected_source_count=len(inspected),
+            uninspected_source_count=uninspected_count,
+            inspected_source_categories=inspected_categories,
+            coverage_complete=uninspected_count == 0
+            and not any(outcome.failed for outcome in outcomes),
+        )
+
     async def _publish(
         self,
         context: _RunContext,
-        result: SynthesisResult,
+        result: SynthesisResult | InitialSynthesisResult,
         accepted: Sequence[_AcceptedEvidence],
+        evidence_ids: Sequence[uuid.UUID],
+        coverage: SnapshotCoverage,
     ) -> None:
         captured_at = self._current_time()
+        if context.initial_snapshot_required:
+            if not isinstance(result, InitialSynthesisResult):
+                raise RuntimeError("initial synthesis did not return a Starting Snapshot")
+            referenced_ids = {
+                reference.evidence_id
+                for section in result.starting_snapshot.sections
+                for reference in section.references
+            }
+            if not referenced_ids.issubset(set(evidence_ids)):
+                raise RuntimeError("initial synthesis referenced unknown evidence")
+            if self._snapshot_publisher is None:
+                raise RuntimeError("Starting Snapshot publisher is unavailable")
+            await self._snapshot_publisher.publish(
+                user_id=context.user_id,
+                competitor_id=context.competitor_id,
+                scout_run_id=context.run_id,
+                snapshot=result.starting_snapshot,
+                coverage=coverage,
+                published_at=captured_at,
+            )
         publications = [
             EvidencePublication(
                 agent_task_id=item.task_id,

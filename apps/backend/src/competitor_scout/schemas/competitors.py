@@ -48,6 +48,7 @@ class CompetitorRead(BaseModel):
     daily_run_time_local: time
     created_at: datetime
     updated_at: datetime
+    starting_snapshot_requested_at: datetime | None
 
 
 class SourceRead(BaseModel):

@@ -59,6 +59,7 @@ _FORBIDDEN_OUTPUT_KEY_PARTS = (
 _OUTPUT_KEYS_BY_TASK_KIND = {
     "daily_planning": frozenset({"tasks"}),
     "daily_synthesis": frozenset({"findings"}),
+    "initial_synthesis": frozenset(),
     "first_party_source_review": frozenset({"sources_inspected", "evidence", "rejected_reasons"}),
     "news_discovery": frozenset({"sources_inspected", "evidence", "rejected_reasons"}),
     "source_discovery": frozenset({"sources", "rejected_count"}),

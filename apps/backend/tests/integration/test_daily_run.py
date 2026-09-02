@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from competitor_scout.agents.client import OtariError, OtariMetadata, OtariUsage
 from competitor_scout.agents.contracts import (
     ChildTaskResult,
+    InitialSynthesisResult,
     ScoutPlan,
     SynthesisResult,
 )
@@ -29,6 +30,7 @@ from competitor_scout.models.intelligence import (
     Competitor,
     CompetitorStatus,
     EvidenceItem,
+    EvidenceObservation,
     Finding,
     MonitoredSource,
     RunType,
@@ -38,7 +40,9 @@ from competitor_scout.models.intelligence import (
     UsageEvent,
 )
 from competitor_scout.models.jobs import Job
+from competitor_scout.models.snapshots import CompetitorStartingSnapshot
 from competitor_scout.services.findings import FindingPublicationService
+from competitor_scout.services.snapshots import SnapshotPublicationService
 
 NOW = datetime(2026, 8, 21, 12, 0, tzinfo=UTC)
 
@@ -256,6 +260,36 @@ class FakeOtari:
                 self.synthesis_schema_failures -= 1
                 raise OtariError("otari_schema_error", retryable=False)
             return synthesis(), self._metadata("synthesis")
+        if output_type is InitialSynthesisResult:
+            messages = kwargs["messages"]
+            assert isinstance(messages, list)
+            payload = json.loads(messages[1]["content"])
+            evidence_id = payload["validated_evidence"][0]["evidence_id"]
+            result = InitialSynthesisResult.model_validate_json(
+                json.dumps(
+                    {
+                        "findings": [],
+                        "starting_snapshot": {
+                            "executive_summary": "Acme publishes enterprise pricing information.",
+                            "sections": [
+                                {
+                                    "topic": "pricing",
+                                    "narrative": "Acme offers enterprise pricing.",
+                                    "references": [
+                                        {
+                                            "evidence_id": evidence_id,
+                                            "statement": (
+                                                "The pricing page describes enterprise pricing."
+                                            ),
+                                        }
+                                    ],
+                                }
+                            ],
+                        },
+                    }
+                )
+            )
+            return result, self._metadata("initial-synthesis")
         raise AssertionError(f"unexpected output type: {output_type}")
 
     def _metadata(self, label: str) -> OtariMetadata:
@@ -382,6 +416,7 @@ async def make_orchestrator(
             minimum_confidence=configured.max_run_cost_usd * 0
             + Decimal(str(configured.finding_confidence_threshold)),
         ),
+        snapshot_publisher=SnapshotPublicationService(sessions),
         url_validator=public_url,
         now=lambda: NOW,
         sleep=no_sleep,
@@ -838,6 +873,70 @@ async def test_news_discovery_child_keeps_web_search_when_firecrawl_configured(
     assert child_call["mcp_server_ids"] is None
 
 
+async def test_requested_initial_run_publishes_snapshot_before_completing(daily_store) -> None:
+    sessions = daily_store
+    _user_id, competitor_id, run_id = await seed_daily_run(sessions)
+    async with sessions.begin() as session:
+        competitor = await session.get(Competitor, competitor_id)
+        assert competitor is not None
+        competitor.starting_snapshot_requested_at = NOW
+
+    fake = FakeOtari(task_count=1)
+    fake.plan = ScoutPlan.model_validate(
+        {
+            "tasks": [
+                {
+                    "kind": "first_party_source_review",
+                    "objective": "Review approved source 0",
+                    "source_urls": ["https://acme.example/pricing"],
+                    "search_query": None,
+                    "expected_category": "pricing",
+                    "max_search_calls": 1,
+                    "completion_criteria": "Return directly quoted evidence or none",
+                }
+            ]
+        },
+        strict=False,
+    )
+    orchestrator = await make_orchestrator(sessions, fake, settings())
+
+    status = await orchestrator.execute_daily_run(run_id)
+
+    async with sessions() as session:
+        snapshot = await session.scalar(
+            select(CompetitorStartingSnapshot).where(
+                CompetitorStartingSnapshot.competitor_id == competitor_id
+            )
+        )
+        observations = list(
+            (
+                await session.scalars(
+                    select(EvidenceObservation).where(EvidenceObservation.scout_run_id == run_id)
+                )
+            ).all()
+        )
+        synthesis_task = await session.scalar(
+            select(AgentTask).where(
+                AgentTask.scout_run_id == run_id,
+                AgentTask.role == AgentTaskRole.MAIN_SYNTHESIZER,
+            )
+        )
+
+    assert status is ScoutRunStatus.COMPLETED
+    assert snapshot is not None
+    assert snapshot.executive_summary == "Acme publishes enterprise pricing information."
+    assert snapshot.coverage == {
+        "approved_source_count": 1,
+        "coverage_complete": True,
+        "inspected_source_categories": ["pricing"],
+        "inspected_source_count": 1,
+        "uninspected_source_count": 0,
+    }
+    assert len(observations) == 1
+    assert synthesis_task is not None and synthesis_task.task_kind == "initial_synthesis"
+    assert any(call["output_type"] is InitialSynthesisResult for call in fake.calls)
+
+
 @pytest.mark.parametrize(
     ("fake_changes", "expected_code"),
     [
@@ -1048,6 +1147,7 @@ async def test_otari_budget_exhaustion_stops_unstarted_child_waves(daily_store) 
             select(AgentTask).where(
                 AgentTask.scout_run_id == run_id,
                 AgentTask.error_code == "otari_budget_exceeded",
+                AgentTask.status == AgentTaskStatus.FAILED,
             )
         )
         cancelled = await session.scalar(

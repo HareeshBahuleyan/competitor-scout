@@ -1,6 +1,7 @@
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Self
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
@@ -70,6 +71,14 @@ FINDING_CATEGORY_DEFINITIONS: dict[FindingCategory, str] = {
         "a last resort."
     ),
 }
+
+
+class SnapshotTopic(StrEnum):
+    POSITIONING = "positioning"
+    PRODUCT = "product"
+    PRICING = "pricing"
+    GO_TO_MARKET = "go_to_market"
+    OTHER = "other"
 
 
 class SignificanceLevel(StrEnum):
@@ -179,5 +188,40 @@ class FindingCandidate(StrictContract):
         return self
 
 
+class SnapshotReferenceCandidate(StrictContract):
+    evidence_id: UUID
+    statement: str = Field(min_length=1, max_length=2000)
+
+
+class SnapshotSectionCandidate(StrictContract):
+    topic: SnapshotTopic
+    narrative: str = Field(min_length=1, max_length=5000)
+    references: list[SnapshotReferenceCandidate] = Field(min_length=1, max_length=30)
+
+    @model_validator(mode="after")
+    def require_unique_references(self) -> Self:
+        evidence_ids = [reference.evidence_id for reference in self.references]
+        if len(evidence_ids) != len(set(evidence_ids)):
+            raise ValueError("snapshot evidence references must be unique within a section")
+        return self
+
+
+class StartingSnapshotCandidate(StrictContract):
+    executive_summary: str = Field(min_length=1, max_length=5000)
+    sections: list[SnapshotSectionCandidate] = Field(min_length=1, max_length=5)
+
+    @model_validator(mode="after")
+    def require_unique_topics(self) -> Self:
+        topics = [section.topic for section in self.sections]
+        if len(topics) != len(set(topics)):
+            raise ValueError("snapshot section topics must be unique")
+        return self
+
+
 class SynthesisResult(StrictContract):
     findings: list[FindingCandidate] = Field(max_length=50)
+
+
+class InitialSynthesisResult(StrictContract):
+    findings: list[FindingCandidate] = Field(max_length=50)
+    starting_snapshot: StartingSnapshotCandidate

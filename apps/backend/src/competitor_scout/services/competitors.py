@@ -199,14 +199,15 @@ async def owned_competitor(
     *,
     user_id: uuid.UUID,
     competitor_id: uuid.UUID,
+    include_deleted: bool = False,
 ) -> Competitor | None:
-    return await db.scalar(
-        select(Competitor).where(
-            Competitor.id == competitor_id,
-            Competitor.user_id == user_id,
-            Competitor.status != CompetitorStatus.DELETED,
-        )
+    statement = select(Competitor).where(
+        Competitor.id == competitor_id,
+        Competitor.user_id == user_id,
     )
+    if not include_deleted:
+        statement = statement.where(Competitor.status != CompetitorStatus.DELETED)
+    return await db.scalar(statement)
 
 
 async def soft_delete_competitor(db: AsyncSession, competitor: Competitor) -> None:

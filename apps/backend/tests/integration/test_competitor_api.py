@@ -11,15 +11,21 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from competitor_scout.agents.contracts import SourceType
 from competitor_scout.api.deps import current_user, require_csrf
 from competitor_scout.config import Settings
 from competitor_scout.db import session_dependency
 from competitor_scout.main import create_app
 from competitor_scout.models.auth import User
 from competitor_scout.models.intelligence import (
+    AgentTask,
+    AgentTaskRole,
+    AgentTaskStatus,
     ApprovalStatus,
     Competitor,
     CompetitorStatus,
+    EvidenceItem,
+    EvidenceObservation,
     MonitoredSource,
     RunType,
     ScoutRun,
@@ -27,6 +33,7 @@ from competitor_scout.models.intelligence import (
     SourceCategory,
 )
 from competitor_scout.models.jobs import Job
+from competitor_scout.models.snapshots import CompetitorStartingSnapshot
 from competitor_scout.security.urls import UnsafeSourceUrl
 from competitor_scout.services.competitors import (
     CompetitorLimitReached,
@@ -135,14 +142,15 @@ async def test_competitor_crud_and_cursor_list_envelope(db_session) -> None:
             json={"name": "Acme Corp", "description": "Market leader"},
         )
         deleted = await client.delete(f"/api/v1/competitors/{competitor_id}")
-        missing = await client.get(f"/api/v1/competitors/{competitor_id}")
+        archived = await client.get(f"/api/v1/competitors/{competitor_id}")
 
     assert fetched.status_code == 200
     assert updated.status_code == 200
     assert updated.json()["name"] == "Acme Corp"
     assert updated.json()["description"] == "Market leader"
     assert deleted.status_code == 204
-    assert missing.status_code == 404
+    assert archived.status_code == 200
+    assert archived.json()["status"] == "deleted"
 
 
 async def test_competitor_create_uses_account_default_daily_time_when_omitted(db_session) -> None:
@@ -600,8 +608,10 @@ async def test_start_monitoring_approves_selection_rejects_rest_and_queues_first
     assert first.json()["run"]["status"] == "queued"
     assert first.json()["run"]["run_type"] == "manual_scout"
     assert first.json()["run"]["id"] == second.json()["run"]["id"]
+    await db_session.refresh(competitor)
     await db_session.refresh(selected)
     await db_session.refresh(skipped)
+    assert competitor.starting_snapshot_requested_at == now
     assert selected.approval_status is ApprovalStatus.APPROVED
     assert skipped.approval_status is ApprovalStatus.REJECTED
     jobs = list((await db_session.scalars(select(Job).where(Job.job_type == "manual_scout"))).all())
@@ -710,3 +720,94 @@ async def test_discovery_endpoint_atomically_enqueues_one_run_per_five_minute_bu
     assert run.scheduled_for == datetime(2026, 8, 21, 12, 0, tzinfo=UTC)
     assert len(jobs) == 1
     assert jobs[0].payload == {"run_id": str(run_id)}
+
+
+async def test_starting_snapshot_read_is_grounded_and_user_scoped(db_session) -> None:
+    owner = await add_user(db_session, "snapshot-owner")
+    other = await add_user(db_session, "snapshot-other")
+    competitor = Competitor(
+        user_id=owner.id,
+        name="Acme",
+        primary_domain="snapshot.example",
+        status=CompetitorStatus.ACTIVE,
+        starting_snapshot_requested_at=datetime(2026, 8, 21, 12, tzinfo=UTC),
+    )
+    run = ScoutRun(
+        user_id=owner.id,
+        competitor=competitor,
+        run_type=RunType.MANUAL_SCOUT,
+        status=ScoutRunStatus.COMPLETED,
+        scheduled_for=datetime(2026, 8, 21, 12, tzinfo=UTC),
+    )
+    task = AgentTask(
+        scout_run=run,
+        role=AgentTaskRole.CHILD_RESEARCHER,
+        task_kind="first_party_source_review",
+        status=AgentTaskStatus.SUCCEEDED,
+        model="test-child",
+        objective="Review pricing",
+    )
+    evidence = EvidenceItem(
+        user_id=owner.id,
+        competitor=competitor,
+        scout_run=run,
+        agent_task=task,
+        source_url="https://snapshot.example/pricing",
+        source_domain="snapshot.example",
+        source_title="Acme pricing",
+        source_type=SourceType.FIRST_PARTY,
+        captured_at=datetime(2026, 8, 21, 12, tzinfo=UTC),
+        quoted_text="Acme offers a public enterprise plan for product teams.",
+        normalized_claim="acme offers enterprise pricing",
+        content_fingerprint="a" * 64,
+    )
+    db_session.add_all([competitor, run, task, evidence])
+    await db_session.flush()
+    db_session.add(
+        EvidenceObservation(
+            scout_run_id=run.id,
+            evidence_item_id=evidence.id,
+            agent_task_id=task.id,
+        )
+    )
+    snapshot = CompetitorStartingSnapshot(
+        user_id=owner.id,
+        competitor_id=competitor.id,
+        scout_run_id=run.id,
+        executive_summary="Acme serves product teams with enterprise analytics.",
+        sections=[
+            {
+                "topic": "pricing",
+                "narrative": "Acme publishes enterprise pricing information.",
+                "references": [
+                    {
+                        "evidence_id": str(evidence.id),
+                        "statement": "The pricing page describes an enterprise plan.",
+                    }
+                ],
+            }
+        ],
+        coverage={
+            "approved_source_count": 1,
+            "inspected_source_count": 1,
+            "uninspected_source_count": 0,
+            "inspected_source_categories": ["pricing"],
+            "coverage_complete": True,
+        },
+        published_at=datetime(2026, 8, 21, 12, tzinfo=UTC),
+    )
+    db_session.add(snapshot)
+    await db_session.flush()
+
+    async with await make_client(db_session, owner, FakeSourceValidator()) as client:
+        response = await client.get(f"/api/v1/competitors/{competitor.id}/starting-snapshot")
+    async with await make_client(db_session, other, FakeSourceValidator()) as client:
+        hidden = await client.get(f"/api/v1/competitors/{competitor.id}/starting-snapshot")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["competitor_name"] == "Acme"
+    assert body["sections"][0]["references"][0]["source_url"] == (
+        "https://snapshot.example/pricing"
+    )
+    assert hidden.status_code == 404

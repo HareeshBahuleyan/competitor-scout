@@ -27,6 +27,7 @@ const competitor = {
   daily_run_time_local: "08:00:00",
   created_at: "2026-08-21T08:00:00Z",
   updated_at: "2026-08-21T08:00:00Z",
+  starting_snapshot_requested_at: null,
 };
 const source = {
   id: "22222222-2222-4222-8222-222222222222",
@@ -37,6 +38,38 @@ const source = {
   approval_status: "approved",
   created_at: "2026-08-21T08:00:00Z",
   updated_at: "2026-08-21T08:00:00Z",
+};
+const snapshot = {
+  id: "66666666-6666-4666-8666-666666666666",
+  competitor_id: competitor.id,
+  competitor_name: competitor.name,
+  scout_run_id: "55555555-5555-4555-8555-555555555555",
+  executive_summary: "Acme serves product teams with analytics software.",
+  sections: [
+    {
+      topic: "positioning",
+      narrative: "Acme positions its analytics product for product teams.",
+      references: [
+        {
+          evidence_id: "77777777-7777-4777-8777-777777777777",
+          statement: "The homepage identifies product teams as the audience.",
+          source_title: "Acme homepage",
+          source_url: "https://acme.example/",
+          quoted_text: "Analytics for modern product teams.",
+          captured_at: "2026-08-21T08:00:02Z",
+        },
+      ],
+    },
+  ],
+  coverage: {
+    approved_source_count: 1,
+    inspected_source_count: 1,
+    uninspected_source_count: 0,
+    inspected_source_categories: ["homepage"],
+    coverage_complete: true,
+  },
+  published_at: "2026-08-21T08:00:02Z",
+  created_at: "2026-08-21T08:00:02Z",
 };
 const me = {
   id: "33333333-3333-4333-8333-333333333333",
@@ -176,6 +209,7 @@ describe("competitor pages", () => {
       if (path === "/api/v1/me") return me as never;
       if (path === "/api/v1/settings") return settings as never;
       if (path === `/api/v1/runs/${firstScan.id}`) return firstScan as never;
+      if (path.endsWith("/starting-snapshot")) return snapshot as never;
       if (path.includes("/runs/")) return run("completed") as never;
       if (path.includes("/sources")) return { items: [source], next_cursor: null } as never;
       throw new Error(`unexpected GET ${path}`);
@@ -231,7 +265,8 @@ describe("competitor pages", () => {
         expect.anything(),
       ),
     );
-    expect(await screen.findByText("First scan complete.")).toBeInTheDocument();
+    expect(await screen.findByText("Your Starting Snapshot is ready")).toBeInTheDocument();
+    expect(screen.getByText(snapshot.executive_summary)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Go to dashboard" })).toHaveAttribute("href", "/");
   });
 

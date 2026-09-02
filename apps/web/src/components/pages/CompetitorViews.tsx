@@ -12,6 +12,7 @@ import { MonitorSettings } from "@/components/MonitorSettings";
 import { runTypeLabel } from "@/components/RunOutcomeSummary";
 import { SetupStepper } from "@/components/SetupStepper";
 import { SourceManagementList } from "@/components/SourceManagementList";
+import { StartingSnapshot } from "@/components/StartingSnapshot";
 import { SourceSelectionList } from "@/components/SourceSelectionList";
 import { CollapsibleSection } from "@/components/ui/CollapsibleSection";
 import { LoadingState } from "@/components/ui/LoadingState";
@@ -32,6 +33,7 @@ import {
   sourcePageSchema,
   sourceSchema,
   startMonitoringResponseSchema,
+  startingSnapshotSchema,
   type Competitor,
   type CursorPage,
   type Source,
@@ -311,6 +313,15 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
     refetchInterval: (query) =>
       terminalStatuses.has(query.state.data?.status ?? "") ? false : pollIntervalMs,
   });
+  const firstSnapshot = useQuery({
+    enabled: Boolean(
+      created && (firstScan.data?.status === "completed" || firstScan.data?.status === "partial"),
+    ),
+    queryKey: ["starting-snapshot", created?.id],
+    queryFn: () =>
+      apiGetClient(`/api/v1/competitors/${created?.id}/starting-snapshot`, startingSnapshotSchema),
+    retry: false,
+  });
 
   function toggleSource(sourceId: string) {
     setDeselectedSourceIds((current) => {
@@ -462,27 +473,51 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
         </div>
       ) : null}
       {step === 3 ? (
-        <div className="surface max-w-2xl space-y-4 p-6">
-          <h2 className="text-xl font-semibold">Your monitor is active</h2>
-          {firstScanRunId && !terminalStatuses.has(firstScan.data?.status ?? "") ? (
-            <WorkingIndicator
-              hint="You can leave this page — the scan keeps running"
-              label="Running the first scan…"
-              messages={firstScanMessages}
-            />
-          ) : null}
-          {firstScan.data?.status === "completed" || firstScan.data?.status === "partial" ? (
-            <p role="status">First scan complete.</p>
-          ) : null}
-          {firstScan.data?.status === "failed" || firstScan.isError ? (
-            <p className="text-red-700" role="alert">
-              {firstScan.data?.failure_summary ||
-                errorText(firstScan.error) ||
-                "First scan failed."}
-            </p>
-          ) : null}
+        <div className="max-w-2xl space-y-4">
+          {!firstSnapshot.data ? (
+            <div className="surface space-y-4 p-6">
+              <h2 className="text-xl font-semibold">Your monitor is active</h2>
+              {firstScanRunId && !terminalStatuses.has(firstScan.data?.status ?? "") ? (
+                <WorkingIndicator
+                  hint="You can leave this page — the scan keeps running"
+                  label="Running the first scan…"
+                  messages={firstScanMessages}
+                />
+              ) : null}
+              {firstSnapshot.isPending &&
+              (firstScan.data?.status === "completed" || firstScan.data?.status === "partial") ? (
+                <p aria-live="polite" role="status">
+                  Preparing your Starting Snapshot…
+                </p>
+              ) : null}
+              {firstScan.data?.status === "failed" || firstScan.isError ? (
+                <p className="text-red-700" role="alert">
+                  {firstScan.data?.failure_summary ||
+                    errorText(firstScan.error) ||
+                    "First scan failed."}
+                </p>
+              ) : null}
+              {firstSnapshot.isError ? (
+                <p className="text-amber-800" role="alert">
+                  The scan ended before a Starting Snapshot was available. Monitoring remains
+                  active; run another scan from the competitor page to retry.
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              <p className="text-lg font-semibold" role="status">
+                Your Starting Snapshot is ready
+              </p>
+              <StartingSnapshot
+                snapshot={firstSnapshot.data}
+                timeZone={me.data.timezone}
+                variant="preview"
+              />
+            </>
+          )}
           <div className="flex flex-wrap gap-3">
-            <Link className="rounded-lg bg-slate-950 px-4 py-2 font-semibold text-white" href="/">
+            <Link className="rounded-lg border border-slate-300 px-4 py-2 font-semibold" href="/">
               Go to dashboard
             </Link>
             {firstScanRunId ? (
@@ -525,6 +560,13 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
   const recentRuns = useQuery({
     queryKey: ["competitor-runs", competitorId],
     queryFn: () => apiGetClient(`/api/v1/runs?competitor_id=${competitorId}`, runPageSchema),
+  });
+  const snapshot = useQuery({
+    enabled: Boolean(competitor.data?.starting_snapshot_requested_at),
+    queryKey: ["starting-snapshot", competitorId],
+    queryFn: () =>
+      apiGetClient(`/api/v1/competitors/${competitorId}/starting-snapshot`, startingSnapshotSchema),
+    retry: false,
   });
   const discovery = useMutation({
     mutationFn: async () => {
@@ -676,6 +718,12 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
     (item) => item.approval_status === "approved",
   ).length;
   const hasApproved = monitoredSourceCount > 0;
+  const snapshotMissing =
+    snapshot.error instanceof Error && "status" in snapshot.error && snapshot.error.status === 404;
+  const snapshotUnavailable = snapshot.isError && !snapshotMissing;
+  const latestSnapshotRun = recentRuns.data.items.find((run) =>
+    ["daily_scout", "manual_scout"].includes(run.run_type),
+  );
   return (
     <article className="space-y-10">
       <header>
@@ -691,23 +739,31 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
         <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <p className="min-w-0 flex-1 text-slate-600">{competitor.data.description}</p>
           <div className="flex shrink-0 flex-wrap gap-2">
-            <button
-              className="rounded-lg border border-slate-300 px-4 py-2 font-medium disabled:text-slate-400"
-              disabled={!hasApproved || competitor.data.status !== "active" || runNow.isPending}
-              onClick={() => runNow.mutate()}
-              type="button"
-            >
-              Run scan now
-            </button>
-            <button
-              aria-controls="competitor-info-settings"
-              aria-expanded={competitorInfoOpen}
-              className="rounded-lg border border-slate-300 px-4 py-2 font-medium"
-              onClick={() => setCompetitorInfoOpen((open) => !open)}
-              type="button"
-            >
-              {competitorInfoOpen ? "Hide competitor info" : "Edit competitor info"}
-            </button>
+            {competitor.data.status === "deleted" ? (
+              <p className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600">
+                Archived · read only
+              </p>
+            ) : (
+              <>
+                <button
+                  className="rounded-lg border border-slate-300 px-4 py-2 font-medium disabled:text-slate-400"
+                  disabled={!hasApproved || competitor.data.status !== "active" || runNow.isPending}
+                  onClick={() => runNow.mutate()}
+                  type="button"
+                >
+                  Run scan now
+                </button>
+                <button
+                  aria-controls="competitor-info-settings"
+                  aria-expanded={competitorInfoOpen}
+                  className="rounded-lg border border-slate-300 px-4 py-2 font-medium"
+                  onClick={() => setCompetitorInfoOpen((open) => !open)}
+                  type="button"
+                >
+                  {competitorInfoOpen ? "Hide competitor info" : "Edit competitor info"}
+                </button>
+              </>
+            )}
           </div>
         </div>
         <a
@@ -752,6 +808,41 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
             }}
           />
         </div>
+      ) : null}
+      {snapshot.data ? (
+        <StartingSnapshot snapshot={snapshot.data} timeZone={me.data.timezone} />
+      ) : null}
+      {competitor.data.starting_snapshot_requested_at && !snapshot.data && !snapshotUnavailable ? (
+        <section className="surface p-5" aria-labelledby="snapshot-pending-title">
+          <p className="eyebrow">Starting Snapshot</p>
+          <h2 className="mt-1 text-xl font-semibold" id="snapshot-pending-title">
+            {competitor.data.status === "paused"
+              ? "Snapshot generation is paused"
+              : latestSnapshotRun &&
+                  ["queued", "planning", "gathering", "synthesizing"].includes(
+                    latestSnapshotRun.status,
+                  )
+                ? "The first scan is in progress"
+                : "Snapshot generation is pending"}
+          </h2>
+          <p className="mt-2 text-slate-600">
+            {latestSnapshotRun?.status === "failed"
+              ? "The last scan could not produce a snapshot. Run another scan to retry."
+              : competitor.data.status === "paused"
+                ? "Resume monitoring and run a scan to create the requested snapshot."
+                : "Scout will publish the snapshot after a qualifying scan completes with valid evidence."}
+          </p>
+          {latestSnapshotRun ? (
+            <Link className="section-link mt-3 inline-block" href={`/runs/${latestSnapshotRun.id}`}>
+              View scan progress
+            </Link>
+          ) : null}
+        </section>
+      ) : null}
+      {snapshotUnavailable ? (
+        <p className="text-red-700" role="alert">
+          The Starting Snapshot could not be loaded. Other competitor information remains available.
+        </p>
       ) : null}
       <CollapsibleSection defaultOpen id="recent-findings" title="Recent updates">
         <div className="flex justify-end">
@@ -803,73 +894,75 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
           <p className="text-sm text-slate-600">No updates for this competitor yet.</p>
         )}
       </CollapsibleSection>
-      <CollapsibleSection id="competitor-sources" title="Sources">
-        <p className="text-sm text-slate-600" role="status">
-          {monitoredSourceCount
-            ? `Scans use ${monitoredSourceCount} monitored ${monitoredSourceCount === 1 ? "source" : "sources"}.`
-            : "Monitor at least one trusted source before activating monitoring."}
-        </p>
-        {sources.data.items.length ? (
-          <div className="space-y-6">
-            <SourceManagementList
-              disabled={sourceUpdate.isPending}
-              onUpdate={(sourceId, approval_status) =>
-                sourceUpdate.mutateAsync({ sourceId, approval_status }).then(() => undefined)
-              }
-              pendingSourceId={pendingSourceId}
-              sources={sources.data.items}
-            />
-            <form
-              aria-label="Add a source"
-              className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-end"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (manualSourceUrl.trim()) addSource.mutate();
-              }}
-            >
-              <label className="field-label min-w-0 flex-1">
-                Add a first-party source
-                <input
-                  aria-describedby="add-source-help"
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2"
-                  disabled={addSource.isPending}
-                  onChange={(event) => setManualSourceUrl(event.target.value)}
-                  placeholder={`https://${competitor.data.primary_domain}/changelog`}
-                  type="url"
-                  value={manualSourceUrl}
-                />
-              </label>
+      {competitor.data.status !== "deleted" ? (
+        <CollapsibleSection id="competitor-sources" title="Sources">
+          <p className="text-sm text-slate-600" role="status">
+            {monitoredSourceCount
+              ? `Scans use ${monitoredSourceCount} monitored ${monitoredSourceCount === 1 ? "source" : "sources"}.`
+              : "Monitor at least one trusted source before activating monitoring."}
+          </p>
+          {sources.data.items.length ? (
+            <div className="space-y-6">
+              <SourceManagementList
+                disabled={sourceUpdate.isPending}
+                onUpdate={(sourceId, approval_status) =>
+                  sourceUpdate.mutateAsync({ sourceId, approval_status }).then(() => undefined)
+                }
+                pendingSourceId={pendingSourceId}
+                sources={sources.data.items}
+              />
+              <form
+                aria-label="Add a source"
+                className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-end"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (manualSourceUrl.trim()) addSource.mutate();
+                }}
+              >
+                <label className="field-label min-w-0 flex-1">
+                  Add a first-party source
+                  <input
+                    aria-describedby="add-source-help"
+                    className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2"
+                    disabled={addSource.isPending}
+                    onChange={(event) => setManualSourceUrl(event.target.value)}
+                    placeholder={`https://${competitor.data.primary_domain}/changelog`}
+                    type="url"
+                    value={manualSourceUrl}
+                  />
+                </label>
+                <button
+                  className="rounded-lg border border-slate-300 px-4 py-2 font-medium disabled:text-slate-400"
+                  disabled={!manualSourceUrl.trim() || addSource.isPending}
+                  type="submit"
+                >
+                  {addSource.isPending ? "Adding…" : "Add source"}
+                </button>
+              </form>
+              <p className="text-sm text-slate-600" id="add-source-help">
+                A new source waits under Awaiting review until you monitor it.
+              </p>
+              {addSource.isError ? (
+                <p className="text-red-700" role="alert">
+                  {errorText(addSource.error)}
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p>No sources have been discovered.</p>
               <button
                 className="rounded-lg border border-slate-300 px-4 py-2 font-medium disabled:text-slate-400"
-                disabled={!manualSourceUrl.trim() || addSource.isPending}
-                type="submit"
+                disabled={discovery.isPending || (Boolean(discoveryRunId) && !discoveryFinished)}
+                onClick={() => discovery.mutate()}
+                type="button"
               >
-                {addSource.isPending ? "Adding…" : "Add source"}
+                Retry source discovery
               </button>
-            </form>
-            <p className="text-sm text-slate-600" id="add-source-help">
-              A new source waits under Awaiting review until you monitor it.
-            </p>
-            {addSource.isError ? (
-              <p className="text-red-700" role="alert">
-                {errorText(addSource.error)}
-              </p>
-            ) : null}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <p>No sources have been discovered.</p>
-            <button
-              className="rounded-lg border border-slate-300 px-4 py-2 font-medium disabled:text-slate-400"
-              disabled={discovery.isPending || (Boolean(discoveryRunId) && !discoveryFinished)}
-              onClick={() => discovery.mutate()}
-              type="button"
-            >
-              Retry source discovery
-            </button>
-          </div>
-        )}
-      </CollapsibleSection>
+            </div>
+          )}
+        </CollapsibleSection>
+      ) : null}
       <CollapsibleSection id="recent-runs" title="Recent scans">
         <div className="flex justify-end">
           <Link className="section-link" href={`/runs?competitor_id=${competitorId}`}>

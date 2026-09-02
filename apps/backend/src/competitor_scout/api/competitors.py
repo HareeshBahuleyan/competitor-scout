@@ -18,6 +18,7 @@ from competitor_scout.schemas.competitors import (
     StartMonitoringResponse,
 )
 from competitor_scout.schemas.runs import RunRead
+from competitor_scout.schemas.snapshots import StartingSnapshotRead
 from competitor_scout.services.competitors import (
     CompetitorActivationNotAllowed,
     CompetitorLimitReached,
@@ -40,6 +41,7 @@ from competitor_scout.services.runs import (
     enqueue_manual_run,
     run_read,
 )
+from competitor_scout.services.snapshots import owned_starting_snapshot
 
 router = APIRouter(prefix="/api/v1/competitors", tags=["competitors"])
 PageLimit = Annotated[int, Query(ge=1, le=100)]
@@ -102,7 +104,12 @@ async def get_competitor_route(
     db: DbSession,
     user: CurrentUser,
 ) -> Competitor:
-    competitor = await owned_competitor(db, user_id=user.id, competitor_id=competitor_id)
+    competitor = await owned_competitor(
+        db,
+        user_id=user.id,
+        competitor_id=competitor_id,
+        include_deleted=True,
+    )
     if competitor is None:
         raise competitor_not_found()
     return competitor
@@ -162,7 +169,12 @@ async def list_sources_route(
     limit: PageLimit = 25,
     cursor: str | None = None,
 ) -> CursorPage[SourceRead]:
-    competitor = await owned_competitor(db, user_id=user.id, competitor_id=competitor_id)
+    competitor = await owned_competitor(
+        db,
+        user_id=user.id,
+        competitor_id=competitor_id,
+        include_deleted=True,
+    )
     if competitor is None:
         raise competitor_not_found()
     try:
@@ -249,18 +261,22 @@ async def start_monitoring_route(
     if competitor is None:
         raise competitor_not_found()
     try:
+        requested_at = utc_now()
         await select_monitoring_sources(
             db,
             competitor=competitor,
             source_ids=payload.source_ids,
             validator=request.app.state.source_url_validator,
         )
+        competitor.starting_snapshot_requested_at = (
+            competitor.starting_snapshot_requested_at or requested_at
+        )
         run = (
             await enqueue_manual_run(
                 db,
                 user_id=user.id,
                 competitor_id=competitor.id,
-                now=utc_now(),
+                now=requested_at,
             )
             if payload.run_initial_scan
             else None
@@ -273,6 +289,25 @@ async def start_monitoring_route(
         competitor=CompetitorRead.model_validate(competitor),
         run=run_read(run) if run is not None else None,
     )
+
+
+@router.get(
+    "/{competitor_id}/starting-snapshot",
+    response_model=StartingSnapshotRead,
+)
+async def get_starting_snapshot_route(
+    competitor_id: uuid.UUID,
+    db: DbSession,
+    user: CurrentUser,
+) -> StartingSnapshotRead:
+    snapshot = await owned_starting_snapshot(
+        db,
+        user_id=user.id,
+        competitor_id=competitor_id,
+    )
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="starting snapshot not found")
+    return snapshot
 
 
 @router.post(
