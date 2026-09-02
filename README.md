@@ -98,6 +98,9 @@ cd ../web
 pnpm test
 pnpm lint
 pnpm build
+
+# Optional browser smoke suite
+pnpm exec playwright install chromium
 pnpm test:e2e
 ```
 
@@ -118,7 +121,8 @@ pre-commit run --all-files
 The hooks reject common file errors, private keys, and leaked secrets; they also
 apply Ruff and Prettier linting and formatting. The Gitleaks hook requires Go.
 GitHub Actions repeats these checks and runs the backend, frontend, migration,
-build, dependency-review, and browser test suites for every pull request.
+build, and dependency-review suites for every pull request. The Playwright browser
+smoke suite remains available as an on-demand local or pre-release check.
 
 See the [Railway deployment guide](docs/railway-deployment.md) for production topology, configuration, and smoke checks.
 

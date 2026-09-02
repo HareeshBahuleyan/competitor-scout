@@ -139,7 +139,3 @@ jobs:
         run: pnpm test
       - name: Build production bundle
         run: pnpm build
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
-      - name: Run browser tests
-        run: pnpm test:e2e

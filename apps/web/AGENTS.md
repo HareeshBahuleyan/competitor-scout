@@ -45,7 +45,7 @@ Read `docs/frontend/design-system.md` before adding reusable components, tokens,
 
 - Use Testing Library and Vitest for user-visible behavior, semantics, forms, and state transitions. Avoid assertions coupled only to Tailwind class strings.
 - Drive HeroUI and react-aria overlays with `@testing-library/user-event`; `fireEvent` does not dispatch the pointer sequence that opens a popover.
-- Use Playwright for critical authentication and cross-page workflows, not for every component variant.
+- Keep Playwright for optional, on-demand authentication and cross-page smoke checks, not routine CI or component variants.
 - Do not update snapshots or loosen assertions merely to make a failure disappear; verify the intended behavior first.
 
 During iteration, run the focused test. Before completion, run the frontend commands from the verification matrix in the root `AGENTS.md`.

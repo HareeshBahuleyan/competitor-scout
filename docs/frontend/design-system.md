@@ -166,4 +166,4 @@ Design narrow layouts first. Allow navigation and filter controls to wrap or scr
 
 ## Adding a pattern
 
-Use the repository skill `add-ui-pattern`. Search existing components and HeroUI first, choose the smallest ownership level, reuse semantic tokens, implement accessibility and all relevant states, then add behavior-focused Testing Library coverage. Use Playwright for critical cross-page behavior rather than visual details.
+Use the repository skill `add-ui-pattern`. Search existing components and HeroUI first, choose the smallest ownership level, reuse semantic tokens, implement accessibility and all relevant states, then add behavior-focused Testing Library coverage. Keep Playwright as an optional, on-demand smoke check for critical cross-page behavior rather than visual details.

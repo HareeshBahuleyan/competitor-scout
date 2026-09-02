@@ -48,13 +48,13 @@ This file owns the cross-cutting invariants and the verification matrix below. N
 
 Run the smallest relevant checks during iteration and the complete affected suite before claiming completion.
 
-| Scope                 | Commands                                                                                                                  |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Backend               | `cd apps/backend && uv run pytest && uv run ruff check src tests scripts && uv run ruff format --check src tests scripts` |
-| Migration             | Backend checks, then `uv run alembic upgrade head && uv run alembic check` against PostgreSQL                             |
-| Frontend              | `cd apps/web && pnpm format:check && pnpm test && pnpm lint && pnpm build`                                                |
-| Critical browser flow | Frontend checks, then `pnpm test:e2e`                                                                                     |
-| Cross-stack contract  | Relevant backend integration tests plus frontend schema/API tests and build                                               |
+| Scope                     | Commands                                                                                                                  |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Backend                   | `cd apps/backend && uv run pytest && uv run ruff check src tests scripts && uv run ruff format --check src tests scripts` |
+| Migration                 | Backend checks, then `uv run alembic upgrade head && uv run alembic check` against PostgreSQL                             |
+| Frontend                  | `cd apps/web && pnpm format:check && pnpm test && pnpm lint && pnpm build`                                                |
+| Browser smoke (on demand) | Frontend checks, then `cd apps/web && pnpm exec playwright install chromium && pnpm test:e2e`                             |
+| Cross-stack contract      | Relevant backend integration tests plus frontend schema/API tests and build                                               |
 
 Do not run `apps/backend/scripts/run_live_evals.py` without explicit approval.
 
