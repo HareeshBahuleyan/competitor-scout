@@ -1364,6 +1364,8 @@ class SourceDiscoveryService:
             separators=(",", ":"),
         )
         search_limit = self._settings.max_source_discovery_search_calls
+        # Discovery needs broad search to find candidate URLs. FireCrawl is reserved
+        # for reading the fixed, user-approved URLs assigned to first-party child tasks.
         system = "\n\n".join(
             (
                 UNTRUSTED_SOURCE_POLICY,
