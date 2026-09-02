@@ -92,6 +92,7 @@ async def worker_resources(
     publisher = FindingPublicationService(
         sessions,
         minimum_confidence=Decimal(str(settings.finding_confidence_threshold)),
+        allow_non_material_findings=settings.publish_non_material_findings,
     )
     cost_estimator = ConfiguredCostEstimator(settings)
     daily_orchestrator = ScoutOrchestrator(

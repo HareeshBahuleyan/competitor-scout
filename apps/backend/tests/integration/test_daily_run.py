@@ -146,7 +146,7 @@ def child_payload(result: ChildTaskResult) -> ChildTaskPayload:
     return ChildTaskPayload.model_validate_json(result.model_dump_json())
 
 
-def synthesis() -> SynthesisResult:
+def synthesis(*, material_change: bool = True) -> SynthesisResult:
     return SynthesisResult.model_validate_json(
         json.dumps(
             {
@@ -159,7 +159,7 @@ def synthesis() -> SynthesisResult:
                         "significance_level": "medium",
                         "confidence": 0.95,
                         "normalized_claim": "acme announced a synthetic product update",
-                        "material_change": True,
+                        "material_change": material_change,
                         "evidence_indexes": [0],
                         "primary_evidence_index": 0,
                         "decision_rationale": "The cited public report directly states the update.",
@@ -190,6 +190,7 @@ class FakeOtari:
         fail_while_mcp: bool = False,
         incomplete_while_web_search: bool = False,
         empty_while_web_search: bool = False,
+        material_change: bool = True,
     ) -> None:
         self.plan = plan(task_count)
         self.fail_children = fail_children or set()
@@ -207,6 +208,7 @@ class FakeOtari:
         self.fail_while_mcp = fail_while_mcp
         self.incomplete_while_web_search = incomplete_while_web_search
         self.empty_while_web_search = empty_while_web_search
+        self.material_change = material_change
         self.calls: list[dict[str, object]] = []
         self.child_attempts: dict[int, int] = {}
         self.active_children = 0
@@ -274,7 +276,7 @@ class FakeOtari:
             if self.synthesis_schema_failures:
                 self.synthesis_schema_failures -= 1
                 raise OtariError("otari_schema_error", retryable=False)
-            return synthesis(), self._metadata("synthesis")
+            return synthesis(material_change=self.material_change), self._metadata("synthesis")
         if output_type is InitialSynthesisResult:
             messages = kwargs["messages"]
             assert isinstance(messages, list)
@@ -431,6 +433,7 @@ async def make_orchestrator(
             sessions,
             minimum_confidence=configured.max_run_cost_usd * 0
             + Decimal(str(configured.finding_confidence_threshold)),
+            allow_non_material_findings=configured.publish_non_material_findings,
         ),
         snapshot_publisher=SnapshotPublicationService(sessions),
         url_validator=public_url,
@@ -573,6 +576,35 @@ async def test_daily_run_happy_path_is_bounded_auditable_and_publishes(daily_sto
     assert all(call["model"] == "competitor-scout-child" for call in child_calls)
     assert all(call["enable_web_search"] is True for call in child_calls)
     assert all(call["max_tool_iterations"] == 4 for call in child_calls)
+
+
+@pytest.mark.parametrize(
+    ("publish_non_material_findings", "expected_finding_count"),
+    [(False, 0), (True, 1)],
+)
+async def test_non_material_findings_follow_publication_policy(
+    daily_store,
+    publish_non_material_findings: bool,
+    expected_finding_count: int,
+) -> None:
+    sessions = daily_store
+    _user_id, _competitor_id, run_id = await seed_daily_run(sessions)
+    fake = FakeOtari(task_count=1, material_change=False)
+    orchestrator = await make_orchestrator(
+        sessions,
+        fake,
+        settings(publish_non_material_findings=publish_non_material_findings),
+    )
+
+    status = await orchestrator.execute_daily_run(run_id)
+
+    async with sessions() as session:
+        finding_count = await session.scalar(
+            select(func.count(Finding.id)).where(Finding.originating_scout_run_id == run_id)
+        )
+
+    assert status is ScoutRunStatus.COMPLETED
+    assert finding_count == expected_finding_count
 
 
 async def test_planning_repair_gets_a_fresh_request_deadline(daily_store) -> None:
