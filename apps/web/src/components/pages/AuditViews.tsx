@@ -197,8 +197,8 @@ export function FindingsListView({ initialFilters }: { initialFilters: FindingFi
         </p>
       ) : null}
       {query.data?.items.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-600">
-          No findings match these filters.
+        <p className="empty-state p-8 text-center">
+          {activeFilters.length ? "No updates match these filters." : "No material changes found."}
         </p>
       ) : null}
       {query.data?.items.length ? (
