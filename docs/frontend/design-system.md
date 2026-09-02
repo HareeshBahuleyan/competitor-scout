@@ -138,6 +138,14 @@ Copy states the consequence next to the control: removing the last monitored sou
 
 Stopping the last monitored source requires an alert-dialog confirmation. The confirmation names the consequence before applying the existing source-status mutation; it does not introduce a separate pause mechanism.
 
+### Starting Snapshots
+
+A Starting Snapshot is the immutable first-value artifact for one competitor. It appears after competitor identity and monitoring status and before Recent updates; it is not a finding, a Weekly Digest, or a primary navigation destination. `StartingSnapshot` owns the compact onboarding preview and full competitor-detail variants so both use the same topic labels, coverage language, timestamps, and evidence treatment.
+
+The full treatment leads with “What Scout established about {competitor},” labels its first-scan provenance, and renders model-authored current-state narratives as text. Topic headings come from the closed contract enum rather than model-authored labels. Native disclosures contain direct evidence quotes and destination-identifying links with safe new-tab relationship attributes. Coverage uses a text label alongside its healthy or warning treatment and never represents an uninspected source as checked.
+
+A competitor with a pending request but no snapshot shows its actual state: active scan progress, failed-scan retry guidance, pending retry, or paused monitoring. Historical competitors with no request show no empty snapshot container. An archived competitor detail remains available as a read-only historical surface so its snapshot, updates, and scans survive the archive action. Onboarding success leads with the snapshot preview and its competitor anchor; dashboard and scan-detail links remain secondary.
+
 ### Monitor settings and local time
 
 `MonitorSettings` owns the competitor-level controls on the detail page: name, description, local daily scan time, pause/resume, and archive. The panel is closed by default and opens from the `Edit competitor info` disclosure beside the primary scan action, keeping infrequent settings out of the reading flow. Recent updates remain visible by default; the heavier Sources and Recent scans sections use the shared closed-by-default `CollapsibleSection`. Source entry and source-state changes remain in the source-management section so the interface does not offer duplicate controls for the same operation. Archiving requires confirmation and explains that existing updates and scan history are retained.

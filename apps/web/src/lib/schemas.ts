@@ -64,6 +64,7 @@ export const competitorSchema = z.object({
   daily_run_time_local: localTimeSchema,
   created_at: timestampSchema,
   updated_at: timestampSchema,
+  starting_snapshot_requested_at: timestampSchema.nullable(),
 });
 
 export type Competitor = z.infer<typeof competitorSchema>;
@@ -227,6 +228,53 @@ export const startMonitoringResponseSchema = z.object({
   competitor: competitorSchema,
   run: runSchema.nullable(),
 });
+
+export const snapshotTopicSchema = z.enum([
+  "positioning",
+  "product",
+  "pricing",
+  "go_to_market",
+  "other",
+]);
+
+export const snapshotCoverageSchema = z.object({
+  approved_source_count: z.number().int().nonnegative(),
+  inspected_source_count: z.number().int().nonnegative(),
+  uninspected_source_count: z.number().int().nonnegative(),
+  inspected_source_categories: z.array(sourceCategorySchema).max(9),
+  coverage_complete: z.boolean(),
+});
+
+export const snapshotEvidenceSchema = z.object({
+  evidence_id: z.string().uuid(),
+  statement: z.string().min(1).max(2_000),
+  source_title: z.string().min(1).max(500),
+  source_url: z
+    .string()
+    .url()
+    .refine((value) => new URL(value).protocol === "https:", "HTTPS URL required"),
+  quoted_text: z.string().min(1).max(5_000),
+  captured_at: timestampSchema,
+});
+
+export const snapshotSectionSchema = z.object({
+  topic: snapshotTopicSchema,
+  narrative: z.string().min(1).max(5_000),
+  references: z.array(snapshotEvidenceSchema).min(1).max(30),
+});
+
+export const startingSnapshotSchema = z.object({
+  id: z.string().uuid(),
+  competitor_id: z.string().uuid(),
+  competitor_name: z.string().min(1).max(200),
+  scout_run_id: z.string().uuid(),
+  executive_summary: z.string().min(1).max(5_000),
+  sections: z.array(snapshotSectionSchema).min(1).max(5),
+  coverage: snapshotCoverageSchema,
+  published_at: timestampSchema,
+  created_at: timestampSchema,
+});
+export type StartingSnapshot = z.infer<typeof startingSnapshotSchema>;
 
 export const briefFindingReferenceSchema = z.object({
   finding_id: z.string().uuid(),

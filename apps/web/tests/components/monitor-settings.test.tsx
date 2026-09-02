@@ -13,6 +13,7 @@ const competitor: Competitor = {
   daily_run_time_local: "08:00:00",
   created_at: "2026-08-21T08:00:00Z",
   updated_at: "2026-08-21T08:00:00Z",
+  starting_snapshot_requested_at: null,
 };
 
 describe("MonitorSettings", () => {

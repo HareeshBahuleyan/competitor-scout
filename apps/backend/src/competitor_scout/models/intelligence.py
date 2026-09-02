@@ -132,6 +132,7 @@ class Competitor(Base):
         onupdate=func.now(),
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    starting_snapshot_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     user: Mapped[User] = relationship()
     sources: Mapped[list[MonitoredSource]] = relationship(
@@ -427,6 +428,31 @@ class EvidenceItem(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+
+
+class EvidenceObservation(Base):
+    __tablename__ = "evidence_observations"
+    __table_args__ = (Index("ix_evidence_observations_evidence_item", "evidence_item_id"),)
+
+    scout_run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("scout_runs.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    evidence_item_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("evidence_items.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    agent_task_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("agent_tasks.id", ondelete="CASCADE"),
+    )
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+    scout_run: Mapped[ScoutRun] = relationship()
+    evidence_item: Mapped[EvidenceItem] = relationship()
+    agent_task: Mapped[AgentTask] = relationship()
 
 
 class Finding(Base):

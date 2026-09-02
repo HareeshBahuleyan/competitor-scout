@@ -41,6 +41,7 @@ test("guides a new user through sources and the first scan", async ({ page }) =>
     daily_run_time_local: "06:45:00",
     created_at: "2026-08-21T08:00:00Z",
     updated_at: "2026-08-21T08:00:00Z",
+    starting_snapshot_requested_at: null,
   };
   const completedRun = (id: string, runType: string) => ({
     id,
@@ -112,7 +113,11 @@ test("guides a new user through sources and the first scan", async ({ page }) =>
     route.fulfill({
       contentType: "application/json",
       json: {
-        competitor: { ...competitor, status: "active" },
+        competitor: {
+          ...competitor,
+          status: "active",
+          starting_snapshot_requested_at: "2026-08-21T08:00:00Z",
+        },
         run: completedRun(firstScanRunId, "manual_scout"),
       },
       status: 202,
@@ -122,6 +127,43 @@ test("guides a new user through sources and the first scan", async ({ page }) =>
     route.fulfill({
       contentType: "application/json",
       json: completedRun(firstScanRunId, "manual_scout"),
+    }),
+  );
+  await page.route(`**/api/v1/competitors/${competitorId}/starting-snapshot`, (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      json: {
+        id: "55555555-5555-4555-8555-555555555555",
+        competitor_id: competitorId,
+        competitor_name: "Acme",
+        scout_run_id: firstScanRunId,
+        executive_summary: "Acme serves product teams with analytics software.",
+        sections: [
+          {
+            topic: "pricing",
+            narrative: "Acme publishes enterprise pricing information.",
+            references: [
+              {
+                evidence_id: "66666666-6666-4666-8666-666666666666",
+                statement: "The pricing page describes enterprise pricing.",
+                source_title: "Acme pricing",
+                source_url: "https://acme.example/pricing",
+                quoted_text: "Enterprise analytics pricing is available.",
+                captured_at: "2026-08-21T08:01:00Z",
+              },
+            ],
+          },
+        ],
+        coverage: {
+          approved_source_count: 1,
+          inspected_source_count: 1,
+          uninspected_source_count: 0,
+          inspected_source_categories: ["pricing"],
+          coverage_complete: true,
+        },
+        published_at: "2026-08-21T08:01:00Z",
+        created_at: "2026-08-21T08:01:00Z",
+      },
     }),
   );
 
@@ -135,7 +177,8 @@ test("guides a new user through sources and the first scan", async ({ page }) =>
   await page.getByRole("button", { name: "Continue to sources" }).click();
   await expect(page.getByRole("checkbox", { name: "Monitor Pricing" })).toBeChecked();
   await page.getByRole("button", { name: "Start monitoring & run first scan" }).click();
-  await expect(page.getByText("First scan complete.")).toBeVisible();
+  await expect(page.getByText("Your Starting Snapshot is ready")).toBeVisible();
+  await expect(page.getByText("Acme serves product teams with analytics software.")).toBeVisible();
   await expect(page.getByRole("link", { name: "Go to dashboard" })).toHaveAttribute("href", "/");
 });
 

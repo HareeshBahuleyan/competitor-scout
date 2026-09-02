@@ -7,6 +7,7 @@ import pytest
 
 from competitor_scout.agents.contracts import (
     FINDING_CATEGORY_DEFINITIONS,
+    ChildTaskPayload,
     EvidenceCandidate,
     FindingCategory,
 )
@@ -20,6 +21,7 @@ from competitor_scout.agents.prompts import (
 )
 from competitor_scout.agents.validation import (
     NEWS_SCOPE_GUARD_NOTE,
+    normalize_child_payload,
     validate_evidence_scope,
 )
 from competitor_scout.security.urls import UnsafeSourceUrl
@@ -112,6 +114,59 @@ def test_child_prompt_distinguishes_mcp_from_builtin_tool_output() -> None:
     assert "retrieve each URL with the declared tool" in web_search
     assert "Search snippets do not count as inspecting a page" in web_search
     assert "raw JSON only" not in web_search
+    assert "Every named field is required" in web_search
+    assert "RFC 3339 timestamp or null" in web_search
+    assert "use [] when there are none" in web_search
+
+
+def test_child_prompt_carries_sanitized_repair_locations() -> None:
+    system = child_messages(
+        {"search_query": "Example Analytics pricing"},
+        repair_issues=("$.evidence[0].published_at:datetime_parsing",),
+    )[0]["content"]
+
+    assert "previous attempt failed validation" in system
+    assert "$.evidence[0].published_at:datetime_parsing" in system
+
+
+def test_child_payload_rejects_invalid_items_without_discarding_valid_evidence() -> None:
+    payload = ChildTaskPayload.model_validate_json(
+        json.dumps(
+            {
+                "sources_inspected": ["not-a-url", "https://news.example/story"],
+                "evidence": [
+                    {
+                        "source_url": "https://news.example/story",
+                        "source_title": "Valid report",
+                        "source_type": "news",
+                        "quoted_text": "A sufficiently long direct quotation from the report.",
+                        "normalized_claim": "a valid report exists",
+                        "published_at": "2026-08-21T12:00:00Z",
+                        "confidence": 0.9,
+                        "limitations": [],
+                    },
+                    {
+                        "source_url": "https://news.example/other",
+                        "source_title": "Invalid date report",
+                        "source_type": "news",
+                        "quoted_text": "Another sufficiently long direct quotation from a report.",
+                        "normalized_claim": "another report exists",
+                        "published_at": "recently",
+                        "confidence": 0.8,
+                        "limitations": [],
+                    },
+                ],
+                "limitations": [],
+            }
+        )
+    )
+
+    result, rejected = normalize_child_payload(payload)
+
+    assert [str(url) for url in result.sources_inspected] == ["https://news.example/story"]
+    assert [item.source_title for item in result.evidence] == ["Valid report"]
+    assert rejected[0].startswith("sources_inspected[0]:url_parsing")
+    assert rejected[1].startswith("evidence[1].published_at:datetime_")
 
 
 def test_planning_and_synthesis_prompts_share_complete_category_guidance() -> None:

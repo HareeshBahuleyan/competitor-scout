@@ -20,6 +20,7 @@ from competitor_scout.jobs.scheduler import schedule_due_daily_runs, schedule_du
 from competitor_scout.jobs.weekly_brief import WeeklyBriefHandler
 from competitor_scout.security.urls import validate_public_https_url
 from competitor_scout.services.findings import FindingPublicationService
+from competitor_scout.services.snapshots import SnapshotPublicationService
 
 SCHEDULER_INTERVAL_SECONDS = 30.0
 EXECUTOR_IDLE_SECONDS = 1.0
@@ -98,6 +99,7 @@ async def worker_resources(
         client=client,
         settings=settings,
         publisher=publisher,
+        snapshot_publisher=SnapshotPublicationService(sessions),
         url_validator=validate_public_https_url,
         cost_estimator=cost_estimator,
     )

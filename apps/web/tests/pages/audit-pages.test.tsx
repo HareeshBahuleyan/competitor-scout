@@ -84,7 +84,7 @@ describe("findings pages", () => {
 
     renderWithQuery(<FindingsListView initialFilters={{}} />);
 
-    expect(await screen.findByText("No findings match these filters.")).toBeInTheDocument();
+    expect(await screen.findByText("No material changes found.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Category/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Filters" }));
     expect(screen.getByRole("button", { name: /Category/ })).toBeVisible();
@@ -131,11 +131,13 @@ describe("findings pages", () => {
 
     vi.mocked(apiGetClient).mockImplementation(async (path) => {
       if (path === "/api/v1/me") return me as never;
+      if (path.startsWith("/api/v1/competitors"))
+        return { items: [competitor], next_cursor: null } as never;
       if (path.startsWith("/api/v1/findings")) return { items: [], next_cursor: null } as never;
       throw new Error(`unexpected GET ${path}`);
     });
-    const empty = renderWithQuery(<FindingsListView initialFilters={{}} />);
-    expect(await screen.findByText("No findings match these filters.")).toBeInTheDocument();
+    const empty = renderWithQuery(<FindingsListView initialFilters={{ category: "pricing" }} />);
+    expect(await screen.findByText("No updates match these filters.")).toBeInTheDocument();
     empty.unmount();
 
     vi.mocked(apiGetClient).mockImplementation(async (path) => {

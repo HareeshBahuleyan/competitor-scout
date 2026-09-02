@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     max_source_discovery_search_calls: int = Field(default=8, ge=1, le=24)
     main_input_token_limit: int = Field(default=32_000, ge=1, le=1_000_000)
     main_output_token_limit: int = Field(default=4_000, ge=1, le=100_000)
+    planning_output_token_limit: int = Field(default=8_000, ge=1, le=100_000)
+    initial_synthesis_output_token_limit: int = Field(default=8_000, ge=1, le=100_000)
     child_input_token_limit: int = Field(default=16_000, ge=1, le=1_000_000)
     child_output_token_limit: int = Field(default=3_000, ge=1, le=100_000)
     planning_deadline_seconds: int = Field(default=60, ge=1, le=900)
