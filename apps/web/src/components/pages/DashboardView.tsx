@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { CompetitorFavicon } from "@/components/CompetitorFavicon";
 import { FindingCard } from "@/components/FindingCard";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { apiGetClient } from "@/lib/api";
@@ -172,12 +173,19 @@ export function DashboardView() {
                       key={competitor.id}
                     >
                       <div className="flex items-center justify-between gap-3">
-                        <Link
-                          className="card-link min-w-0 truncate text-sm font-semibold transition-colors group-hover:text-[var(--color-accent-strong)]"
-                          href={`/competitors/${competitor.id}`}
-                        >
-                          {competitor.name}
-                        </Link>
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <CompetitorFavicon
+                            domain={competitor.primary_domain}
+                            name={competitor.name}
+                            size="sm"
+                          />
+                          <Link
+                            className="card-link min-w-0 truncate text-sm font-semibold transition-colors group-hover:text-[var(--color-accent-strong)]"
+                            href={`/competitors/${competitor.id}`}
+                          >
+                            {competitor.name}
+                          </Link>
+                        </div>
                         <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] capitalize text-slate-500">
                           <span className="size-1.5 rounded-full bg-[var(--color-success)]" />
                           {latestRun?.status ?? "Not run yet"}

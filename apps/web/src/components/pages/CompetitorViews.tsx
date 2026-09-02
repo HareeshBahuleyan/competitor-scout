@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { CompetitorFavicon } from "@/components/CompetitorFavicon";
 import { CompetitorForm, type CompetitorFormValues } from "@/components/CompetitorForm";
 import { FindingCard } from "@/components/FindingCard";
 import { SetupStepper } from "@/components/SetupStepper";
@@ -76,12 +77,15 @@ export function CompetitorsListView() {
           {query.data.items.map((item) => (
             <li className="surface surface-interactive p-5" key={item.id}>
               <div className="flex justify-between gap-3">
-                <h2 className="font-semibold">
-                  <Link className="hover:underline" href={`/competitors/${item.id}`}>
-                    {item.name}
-                  </Link>
-                </h2>
-                <span className="text-sm capitalize text-slate-500">{item.status}</span>
+                <div className="flex items-center gap-3 min-w-0">
+                  <CompetitorFavicon domain={item.primary_domain} name={item.name} size="md" />
+                  <h2 className="font-semibold truncate">
+                    <Link className="hover:underline" href={`/competitors/${item.id}`}>
+                      {item.name}
+                    </Link>
+                  </h2>
+                </div>
+                <span className="text-sm capitalize text-slate-500 shrink-0">{item.status}</span>
               </div>
               <p className="mt-2 text-sm text-slate-600">
                 {item.description || item.primary_domain}
@@ -601,7 +605,14 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="eyebrow">{competitor.data.status}</p>
-          <h1 className="mt-1 text-4xl font-semibold">{competitor.data.name}</h1>
+          <div className="mt-1 flex items-center gap-3">
+            <CompetitorFavicon
+              domain={competitor.data.primary_domain}
+              name={competitor.data.name}
+              size="lg"
+            />
+            <h1 className="text-4xl font-semibold">{competitor.data.name}</h1>
+          </div>
           <p className="mt-2 text-slate-600">{competitor.data.description}</p>
           <a
             className="section-link mt-2 inline-block"
