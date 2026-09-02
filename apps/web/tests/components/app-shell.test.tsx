@@ -14,7 +14,7 @@ const expectedNavigation = [
   ["Dashboard", "/"],
   ["Competitors", "/competitors"],
   ["Updates", "/findings"],
-  ["Weekly digest", "/briefs"],
+  ["Weekly Digest", "/briefs"],
   ["Settings", "/settings"],
 ] as const;
 

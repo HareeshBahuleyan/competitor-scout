@@ -35,8 +35,8 @@ def test_operational_defaults_are_bounded() -> None:
     assert settings.max_active_competitors == 10
     assert settings.max_child_tasks_per_run == 8
     assert settings.max_concurrent_child_tasks == 4
-    assert settings.max_child_search_calls == 2
-    assert settings.max_source_discovery_search_calls == 5
+    assert settings.max_child_search_calls == 4
+    assert settings.max_source_discovery_search_calls == 8
     assert settings.main_input_token_limit == 32_000
     assert settings.main_output_token_limit == 4_000
     assert settings.child_input_token_limit == 16_000

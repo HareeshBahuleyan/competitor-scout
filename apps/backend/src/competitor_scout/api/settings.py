@@ -51,10 +51,6 @@ async def update_settings_route(
 async def usage_summary_route(db: DbSession, user: CurrentUser) -> UsageSummary:
     utc_date = func.date(func.timezone("UTC", UsageEvent.occurred_at))
     row_count = func.count()
-    tool_calls = case(
-        (row_count == func.count(UsageEvent.tool_calls), func.sum(UsageEvent.tool_calls)),
-        else_=None,
-    )
     settled_cost = case(
         (
             row_count == func.count(UsageEvent.settled_cost_usd),
@@ -69,7 +65,6 @@ async def usage_summary_route(db: DbSession, user: CurrentUser) -> UsageSummary:
                 UsageEvent.model,
                 func.sum(UsageEvent.input_tokens).label("input_tokens"),
                 func.sum(UsageEvent.output_tokens).label("output_tokens"),
-                tool_calls.label("tool_calls"),
                 settled_cost.label("settled_cost_usd"),
             )
             .where(UsageEvent.user_id == user.id)

@@ -53,6 +53,7 @@ test("guides a new user through sources and the first scan", async ({ page }) =>
     failure_code: null,
     failure_summary: null,
     partial_reasons: [],
+    partial_summaries: [],
     input_tokens: 100,
     output_tokens: 50,
     tool_calls: 1,
@@ -153,6 +154,7 @@ test("audits a completed run without rendering internal fields", async ({ page }
         failure_code: null,
         failure_summary: null,
         partial_reasons: [],
+        partial_summaries: [],
         input_tokens: 100,
         output_tokens: 50,
         tool_calls: 1,
@@ -208,7 +210,8 @@ test("explains a partial run and its retries", async ({ page }) => {
         completed_at: "2026-08-21T08:05:00Z",
         failure_code: null,
         failure_summary: null,
-        partial_reasons: ["Pricing source timed out after retry"],
+        partial_reasons: ["source_unavailable"],
+        partial_summaries: ["Pricing source timed out after retry"],
         input_tokens: 100,
         output_tokens: 50,
         tool_calls: null,
@@ -261,7 +264,6 @@ test("explains a partial run and its retries", async ({ page }) => {
   await expect(page.getByText("Pricing source timed out after retry")).toBeVisible();
   await page.getByText("Usage details", { exact: true }).click();
   await expect(page.getByText("Retries: 1")).toBeVisible();
-  await expect(page.getByText("Tool calls: Unknown")).toBeVisible();
   await expect(page.getByText("Settled cost: Unknown")).toBeVisible();
 });
 

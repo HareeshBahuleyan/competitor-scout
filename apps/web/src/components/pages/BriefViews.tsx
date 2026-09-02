@@ -33,19 +33,19 @@ export function BriefsListView() {
     <section className="space-y-6">
       <header>
         <p className="eyebrow">Executive intelligence</p>
-        <h1 className="mt-1 text-4xl font-semibold">Weekly digest</h1>
+        <h1 className="mt-1 text-4xl font-semibold">Weekly Digest</h1>
         <p className="mt-2 text-slate-600">
           Your week in one page, backed by the updates behind it.
         </p>
       </header>
-      {query.isPending ? <LoadingState label="Loading weekly digests…" rows={4} /> : null}
+      {query.isPending ? <LoadingState label="Loading Weekly Digests…" rows={4} /> : null}
       {query.isError ? (
         <p className="text-red-700" role="alert">
           {errorText(query.error)}
         </p>
       ) : null}
       {query.data?.items.length === 0 ? (
-        <p className="empty-state p-8 text-center">No weekly digest yet.</p>
+        <p className="empty-state p-8 text-center">No Weekly Digest yet.</p>
       ) : null}
       {query.data?.items.length ? (
         <ul className="space-y-4">
@@ -73,7 +73,7 @@ export function BriefDetailView({ briefId }: { briefId: string }) {
     queryKey: ["brief", briefId],
     queryFn: () => apiGetClient(`/api/v1/briefs/${briefId}`, weeklyBriefSchema),
   });
-  if (query.isPending) return <LoadingState label="Loading the weekly digest…" rows={4} />;
+  if (query.isPending) return <LoadingState label="Loading the Weekly Digest…" rows={4} />;
   if (query.isError)
     return (
       <p className="text-red-700" role="alert">

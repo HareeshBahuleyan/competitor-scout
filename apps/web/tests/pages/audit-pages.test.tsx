@@ -37,7 +37,8 @@ const run = {
   completed_at: "2026-08-21T08:05:00Z",
   failure_code: null,
   failure_summary: null,
-  partial_reasons: ["One source timed out"],
+  partial_reasons: ["source_unavailable"],
+  partial_summaries: [],
   input_tokens: 100,
   output_tokens: 20,
   tool_calls: null,
@@ -199,17 +200,12 @@ describe("run pages", () => {
     });
     renderWithQuery(<RunDetailView runId={run.id} />);
     expect(await screen.findByRole("heading", { name: /daily scout run/i })).toBeInTheDocument();
-    expect(screen.getByText("One source timed out")).toBeInTheDocument();
+    expect(screen.getByText("Source unavailable")).toBeInTheDocument();
     expect(screen.getByText("Review first-party pricing")).toBeInTheDocument();
     expect(
       screen.getByText(
         (_, element) =>
           element?.tagName === "P" && element.textContent?.includes("Attempts: 2") === true,
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        (_, element) => element?.tagName === "P" && element.textContent === "Tool calls: Unknown",
       ),
     ).toBeInTheDocument();
     expect(

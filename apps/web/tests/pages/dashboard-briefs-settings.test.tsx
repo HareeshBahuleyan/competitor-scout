@@ -48,7 +48,8 @@ const run = {
   completed_at: "2026-08-21T08:05:00Z",
   failure_code: null,
   failure_summary: null,
-  partial_reasons: ["One source timed out"],
+  partial_reasons: ["child_task_failed"],
+  partial_summaries: ["Some research tasks could not complete."],
   input_tokens: 100,
   output_tokens: 20,
   tool_calls: null,
@@ -92,7 +93,6 @@ const usage = {
       model: "competitor-scout-main",
       input_tokens: 100,
       output_tokens: 20,
-      tool_calls: null,
       settled_cost_usd: null,
     },
   ],
@@ -167,6 +167,15 @@ describe("dashboard", () => {
       "href",
       "/competitors/new",
     );
+    expect(screen.getByRole("link", { name: "Manage competitors" })).toHaveAttribute(
+      "href",
+      "/competitors",
+    );
+    expect(screen.getByRole("link", { name: "Browse updates" })).toHaveAttribute(
+      "href",
+      "/findings",
+    );
+    expect(screen.getByRole("link", { name: "Review scans" })).toHaveAttribute("href", "/runs");
     expect(screen.getByRole("link", { name: "Acme changed pricing" })).toHaveAttribute(
       "href",
       `/findings/${finding.id}`,
@@ -181,7 +190,7 @@ describe("dashboard", () => {
       `/competitors/${competitor.id}`,
     );
     expect(screen.getAllByText("partial").length).toBeGreaterThan(0);
-    expect(screen.getByRole("alert")).toHaveTextContent("One source timed out");
+    expect(screen.getByRole("alert")).toHaveTextContent("Some research tasks could not complete.");
     expect(screen.getByRole("link", { name: brief.title })).toHaveAttribute(
       "href",
       `/briefs/${brief.id}`,
@@ -244,7 +253,7 @@ describe("weekly briefs", () => {
   it("renders an honest empty week without fabricated references and exposes empty/error states", async () => {
     vi.mocked(apiGetClient).mockResolvedValueOnce({
       ...brief,
-      title: "Weekly digest: no material changes",
+      title: "Weekly Digest: no material changes",
       executive_summary: "No accepted material changes were published during this weekly period.",
       sections: [],
     } as never);
@@ -259,7 +268,7 @@ describe("weekly briefs", () => {
 
     vi.mocked(apiGetClient).mockResolvedValueOnce({ items: [], next_cursor: null } as never);
     const empty = renderWithQuery(<BriefsListView />);
-    expect(await screen.findByText("No weekly digest yet.")).toBeInTheDocument();
+    expect(await screen.findByText("No Weekly Digest yet.")).toBeInTheDocument();
     empty.unmount();
 
     vi.mocked(apiGetClient).mockRejectedValueOnce(new Error("briefs unavailable"));
@@ -290,7 +299,7 @@ describe("settings and usage", () => {
     expect(timezone).toHaveTextContent("Berlin — Central European Time");
     expect(screen.getByLabelText("Default daily run time")).toHaveValue("08:30");
     expect(screen.getByText("competitor-scout-main")).toBeInTheDocument();
-    expect(screen.getAllByText("Unknown")).toHaveLength(2);
+    expect(screen.getAllByText("Unknown")).toHaveLength(1);
     expect(screen.queryByLabelText(/model|budget|tool/i)).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "New Founder" } });

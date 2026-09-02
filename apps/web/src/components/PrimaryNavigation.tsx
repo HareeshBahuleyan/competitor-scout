@@ -12,7 +12,7 @@ const navigation: ReadonlyArray<{ href: string; icon: IconName; label: string }>
   { href: "/", icon: "dashboard", label: "Dashboard" },
   { href: "/competitors", icon: "competitors", label: "Competitors" },
   { href: "/findings", icon: "updates", label: "Updates" },
-  { href: "/briefs", icon: "digest", label: "Weekly digest" },
+  { href: "/briefs", icon: "digest", label: "Weekly Digest" },
   { href: "/settings", icon: "settings", label: "Settings" },
 ];
 

@@ -57,6 +57,7 @@ const run = (status: string, failure_summary: string | null = null) => ({
   failure_code: status === "failed" ? "provider_error" : null,
   failure_summary,
   partial_reasons: [],
+  partial_summaries: [],
   input_tokens: 1,
   output_tokens: 2,
   tool_calls: 1,
@@ -381,7 +382,7 @@ describe("competitor pages", () => {
       "/findings",
     );
     expect(screen.getByRole("button", { name: "Activate monitoring" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Approve Pricing" }));
+    fireEvent.click(screen.getByRole("button", { name: "Monitor Pricing" }));
     await waitFor(() =>
       expect(apiMutate).toHaveBeenCalledWith(
         `/api/v1/competitors/${competitor.id}/sources/${source.id}`,

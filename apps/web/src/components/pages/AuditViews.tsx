@@ -356,6 +356,7 @@ export function RunDetailView({ runId }: { runId: string }) {
       <RunTimeline
         failure_reason={run.data.failure_summary}
         partial_reasons={run.data.partial_reasons}
+        partial_summaries={run.data.partial_summaries}
         retry_count={retries}
         status={run.data.status}
         steps={lifecycle(run.data)}

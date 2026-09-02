@@ -16,7 +16,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 OLD_TITLE = "Weekly brief: no material changes"
-NEW_TITLE = "Weekly digest: no material changes"
+NEW_TITLE = "Weekly Digest: no material changes"
 
 # `BriefRead` rejects a section-less brief whose title is not the current
 # canonical value, so stored rows must move with the constant or reads fail.

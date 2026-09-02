@@ -8,11 +8,12 @@ import { useEffect, useState } from "react";
 import { CompetitorForm, type CompetitorFormValues } from "@/components/CompetitorForm";
 import { FindingCard } from "@/components/FindingCard";
 import { SetupStepper } from "@/components/SetupStepper";
-import { SourceApprovalList } from "@/components/SourceApprovalList";
+import { SourceManagementList } from "@/components/SourceManagementList";
 import { SourceSelectionList } from "@/components/SourceSelectionList";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { WorkingIndicator } from "@/components/ui/WorkingIndicator";
 import { apiGetClient, apiMutate } from "@/lib/api";
+import { partialReasonLabels } from "@/lib/runs";
 import {
   competitorPageSchema,
   competitorSchema,
@@ -448,6 +449,7 @@ export function NewCompetitorView({ pollIntervalMs = 1_000 }: NewCompetitorViewP
 export function CompetitorDetailView({ competitorId }: { competitorId: string }) {
   const client = useQueryClient();
   const [pendingSourceId, setPendingSourceId] = useState<string | null>(null);
+  const [manualSourceUrl, setManualSourceUrl] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [discoveryRunId, setDiscoveryRunId] = useState<string | null>(null);
   const me = useQuery({ queryKey: ["me"], queryFn: () => apiGetClient("/api/v1/me", meSchema) });
@@ -533,6 +535,25 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
     },
     onSettled: () => setPendingSourceId(null),
   });
+  const addSource = useMutation({
+    mutationFn: async () => {
+      if (!me.data) throw new Error("Account information is unavailable.");
+      return apiMutate(
+        `/api/v1/competitors/${competitorId}/sources`,
+        {
+          body: { url: manualSourceUrl.trim() },
+          csrfToken: me.data.csrf_token,
+          method: "POST",
+        },
+        sourceSchema,
+      );
+    },
+    onSuccess: async () => {
+      setManualSourceUrl("");
+      setNotice("Source added. Monitor it to include it in scans.");
+      await sources.refetch();
+    },
+  });
   const activate = useMutation({
     mutationFn: async () => {
       if (!me.data) throw new Error("Account information is unavailable.");
@@ -617,14 +638,52 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
         </p>
       ) : null}
       {sources.data.items.length ? (
-        <SourceApprovalList
-          disabled={sourceUpdate.isPending}
-          onUpdate={(sourceId, approval_status) =>
-            sourceUpdate.mutateAsync({ sourceId, approval_status }).then(() => undefined)
-          }
-          pendingSourceId={pendingSourceId}
-          sources={sources.data.items}
-        />
+        <div className="space-y-6">
+          <SourceManagementList
+            disabled={sourceUpdate.isPending}
+            onUpdate={(sourceId, approval_status) =>
+              sourceUpdate.mutateAsync({ sourceId, approval_status }).then(() => undefined)
+            }
+            pendingSourceId={pendingSourceId}
+            sources={sources.data.items}
+          />
+          <form
+            aria-label="Add a source"
+            className="surface flex flex-col gap-3 p-4 sm:flex-row sm:items-end"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (manualSourceUrl.trim()) addSource.mutate();
+            }}
+          >
+            <label className="field-label min-w-0 flex-1">
+              Add a first-party source
+              <input
+                aria-describedby="add-source-help"
+                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2"
+                disabled={addSource.isPending}
+                onChange={(event) => setManualSourceUrl(event.target.value)}
+                placeholder={`https://${competitor.data.primary_domain}/changelog`}
+                type="url"
+                value={manualSourceUrl}
+              />
+            </label>
+            <button
+              className="rounded-lg border border-slate-300 px-4 py-2 font-medium disabled:text-slate-400"
+              disabled={!manualSourceUrl.trim() || addSource.isPending}
+              type="submit"
+            >
+              {addSource.isPending ? "Adding…" : "Add source"}
+            </button>
+          </form>
+          <p className="text-sm text-slate-600" id="add-source-help">
+            A new source waits under Awaiting review until you monitor it.
+          </p>
+          {addSource.isError ? (
+            <p className="text-red-700" role="alert">
+              {errorText(addSource.error)}
+            </p>
+          ) : null}
+        </div>
       ) : (
         <div className="space-y-3">
           <p>No sources have been discovered.</p>
@@ -713,7 +772,9 @@ export function CompetitorDetailView({ competitorId }: { competitorId: string })
                 </Link>
                 <span className="ml-3 text-sm capitalize text-slate-500">{run.status}</span>
                 {run.partial_reasons.length ? (
-                  <p className="mt-2 text-sm text-amber-700">{run.partial_reasons.join("; ")}</p>
+                  <p className="mt-2 text-sm text-amber-700">
+                    {partialReasonLabels(run.partial_reasons, run.partial_summaries).join("; ")}
+                  </p>
                 ) : null}
                 {run.failure_summary ? (
                   <p className="mt-2 text-sm text-red-700">{run.failure_summary}</p>

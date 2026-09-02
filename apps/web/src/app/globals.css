@@ -306,6 +306,55 @@ textarea {
   text-underline-offset: 3px;
 }
 
+/* Inline link inside body copy or a heading: always underlined so it reads as a
+   link without depending on color alone. */
+.text-link {
+  color: var(--color-accent-strong);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+
+.text-link:hover {
+  color: var(--color-accent);
+  text-decoration-thickness: 2px;
+}
+
+/* Clickable card or row: one real link inside the container covers the whole
+   target area, so the hover affordance and the click target agree. */
+.card-target {
+  position: relative;
+}
+
+.card-target .card-link::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  content: "";
+}
+
+.card-target:has(.card-link:hover) {
+  cursor: pointer;
+}
+
+.card-target .card-link:focus-visible {
+  outline: none;
+}
+
+.card-target:has(.card-link:focus-visible) {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Content that must stay selectable or independently clickable sits above the
+   overlay. */
+.card-target .card-above {
+  position: relative;
+  z-index: 2;
+}
+
 .empty-state {
   border: 1px dashed var(--color-slate-300);
   border-radius: var(--radius-card);

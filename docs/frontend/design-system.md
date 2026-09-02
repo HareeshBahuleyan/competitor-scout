@@ -63,8 +63,10 @@ Do not communicate hierarchy by shrinking important text below readable sizes. U
 
 - `.surface`: bordered, elevated content container.
 - `.surface-interactive`: hover elevation for a genuinely clickable surface.
+- `.card-target` with `.card-link`: whole-card or whole-row click target. The container carries `.card-target`, the single real `<Link>` inside carries `.card-link` and stretches over the container, and the container shows the focus ring while that link has focus. Put content that must stay independently interactive or selectable in `.card-above`. Pair it with `.surface-interactive` so the hover affordance and the click target describe the same area, and keep a visible textual cue such as an arrow so the card reads as navigation.
 - `.empty-state`: dashed, quiet container for absent data.
 - `.section-link`: compact accent link for secondary navigation.
+- `.text-link`: inline link inside body copy or a heading, underlined so it does not rely on color alone. Evidence citations use it for the source title and for URLs found inside quoted source text.
 - `.field-label` and `.select-control`: form label and native-select treatment.
 - `.nav-link`, `.icon-button`, and `.brand-mark`: shell-specific patterns.
 
@@ -79,10 +81,10 @@ Keep shell classes in global CSS. Prefer a React primitive under `components/ui/
 | Dashboard     | `/`            | Active monitors, material updates, scans needing attention, digest |
 | Competitors   | `/competitors` | Monitored companies; `/competitors/new` is the guided setup        |
 | Updates       | `/findings`    | One detected change per row, filterable, each with linked evidence |
-| Weekly digest | `/briefs`      | Per-week narrative whose sections cite the updates behind them     |
+| Weekly Digest | `/briefs`      | Per-week narrative whose sections cite the updates behind them     |
 | Settings      | `/settings`    | Profile, default schedule, usage totals, troubleshooting           |
 
-Updates and the weekly digest are the same intelligence at two granularities: the atomic feed to search and cite, and the synthesized read for a week. Keep that relationship visible by linking digest sections back to individual updates.
+Updates and the Weekly Digest are the same intelligence at two granularities: the atomic feed to search and cite, and the synthesized read for a week. Keep that relationship visible by linking digest sections back to individual updates.
 
 Operator surfaces stay out of primary navigation. `/runs` and `/runs/{id}` render Scout Run lifecycle timelines, child agent tasks, and per-run token and cost usage, which is execution detail rather than intelligence. They remain fully routed and reachable in context — from Settings troubleshooting, dashboard scan warnings, a competitor's recent scans, guided setup during a first scan, and the provenance links on evidence, finding, and brief detail — so a reader arrives with a reason instead of browsing there. Apply the same rule to any future diagnostic view.
 
@@ -93,12 +95,14 @@ User-facing copy uses the reader's words, while routes, API paths, and schema fi
 | Interface     | Contract     |
 | ------------- | ------------ |
 | update        | finding      |
-| weekly digest | weekly brief |
+| Weekly Digest | weekly brief |
 | scan          | run          |
 
 Renaming a surface is a copy change only; do not rename routes or Zod fields to match, because the backend Pydantic model is the contract's source of truth.
 
-The vocabulary also governs strings the backend or the model authors and the interface renders verbatim, such as a weekly brief's title. Those are not frontend copy and cannot be corrected in a view, so check them when a surface is renamed. See `docs/architecture/agent-runtime.md` for the canonical empty-brief value and the migration it requires.
+A section's name is a proper noun and keeps title case everywhere it names the section, including inside a sentence and inside a persisted string: `Weekly Digest`, `No Weekly Digest yet.`, `Weekly Digest: no material changes`. Common nouns for what a section contains stay lowercase in prose, as in "backed by the updates behind it" or "the scan that produced this digest". Sentence case remains the default for every other heading, label, button, and empty state.
+
+Scan failure and partial-scan copy is backend-authored in the same way: `failure_summary` and `partial_summaries` carry reader-facing sentences, while `failure_code` and `partial_reasons` stay machine codes. Views render the sentences and fall back to the humanized code only when the backend has no copy for a reason yet, so new copy belongs in `services/runs.py`, not in a view. The vocabulary also governs strings the backend or the model authors and the interface renders verbatim, such as a weekly brief's title. Those are not frontend copy and cannot be corrected in a view, so check them when a surface is renamed. See `docs/architecture/agent-runtime.md` for the canonical empty-brief value and the migration it requires.
 
 ## Component ownership
 

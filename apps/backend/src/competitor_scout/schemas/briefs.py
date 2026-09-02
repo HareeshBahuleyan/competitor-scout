@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-EMPTY_BRIEF_TITLE = "Weekly digest: no material changes"
+EMPTY_BRIEF_TITLE = "Weekly Digest: no material changes"
 EMPTY_BRIEF_EXECUTIVE_SUMMARY = (
     "No accepted material changes were published during this weekly period."
 )

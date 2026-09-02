@@ -58,6 +58,44 @@ describe("EvidenceList", () => {
     expect(screen.getByText("Publication time unavailable")).toBeVisible();
   });
 
+  it("links HTTPS URLs inside quoted source text", () => {
+    render(
+      <EvidenceList
+        evidence={[
+          {
+            ...pricingEvidence,
+            quoted_text:
+              "- Multimodal Capabilities (https://acme.example/docs/multimodal.md): send images.",
+          },
+        ]}
+      />,
+    );
+
+    const quotedLink = screen.getByRole("link", {
+      name: "https://acme.example/docs/multimodal.md",
+    });
+    expect(quotedLink).toHaveAttribute("href", "https://acme.example/docs/multimodal.md");
+    expect(quotedLink).toHaveAttribute("target", "_blank");
+    expect(quotedLink).toHaveAttribute("rel", expect.stringContaining("noopener"));
+    expect(screen.getByText(/send images/)).toBeVisible();
+  });
+
+  it("leaves non-HTTPS URLs in quoted source text as plain text", () => {
+    render(
+      <EvidenceList
+        evidence={[
+          {
+            ...pricingEvidence,
+            quoted_text: "See http://acme.example/insecure and javascript:alert('owned') instead.",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.queryAllByRole("link")).toHaveLength(1);
+    expect(screen.getByText(/http:\/\/acme\.example\/insecure/)).toBeVisible();
+  });
+
   it("does not make a non-HTTPS source URL clickable", () => {
     render(
       <EvidenceList

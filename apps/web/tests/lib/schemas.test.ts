@@ -190,6 +190,7 @@ describe("audit schemas", () => {
       failure_code: null,
       failure_summary: null,
       partial_reasons: [],
+      partial_summaries: [],
       input_tokens: 0,
       output_tokens: 0,
       tool_calls: null,
@@ -235,7 +236,7 @@ describe("brief, settings, and aggregate usage schemas", () => {
     expect(
       weeklyBriefSchema.parse({
         ...base,
-        title: "Weekly digest: no material changes",
+        title: "Weekly Digest: no material changes",
         executive_summary: "No accepted material changes were published during this weekly period.",
         sections: [],
       }).sections,
@@ -279,11 +280,10 @@ describe("brief, settings, and aggregate usage schemas", () => {
             model: "competitor-scout-main",
             input_tokens: 100,
             output_tokens: 20,
-            tool_calls: null,
             settled_cost_usd: null,
           },
         ],
       }).items[0],
-    ).toMatchObject({ tool_calls: null, settled_cost_usd: null });
+    ).toMatchObject({ input_tokens: 100, settled_cost_usd: null });
   });
 });

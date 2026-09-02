@@ -213,7 +213,6 @@ export function SettingsView() {
                   <th className="p-3">Model</th>
                   <th className="p-3">Input tokens</th>
                   <th className="p-3">Output tokens</th>
-                  <th className="p-3">Tool calls</th>
                   <th className="p-3">Settled cost</th>
                 </tr>
               </thead>
@@ -224,7 +223,6 @@ export function SettingsView() {
                     <td className="p-3">{row.model}</td>
                     <td className="p-3">{row.input_tokens.toLocaleString()}</td>
                     <td className="p-3">{row.output_tokens.toLocaleString()}</td>
-                    <td className="p-3">{row.tool_calls ?? "Unknown"}</td>
                     <td className="p-3">{displayCost(row.settled_cost_usd)}</td>
                   </tr>
                 ))}

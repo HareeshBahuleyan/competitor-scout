@@ -124,6 +124,7 @@ class RunRead(BaseModel):
     failure_code: str | None
     failure_summary: str | None
     partial_reasons: list[str]
+    partial_summaries: list[str]
     input_tokens: int
     output_tokens: int
     tool_calls: int | None

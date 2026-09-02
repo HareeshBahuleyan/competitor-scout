@@ -8,6 +8,7 @@ import { useEffect } from "react";
 import { FindingCard } from "@/components/FindingCard";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { apiGetClient } from "@/lib/api";
+import { partialReasonLabels } from "@/lib/runs";
 import {
   competitorPageSchema,
   findingPageSchema,
@@ -26,6 +27,54 @@ function latestRunFor(competitorId: string, runs: Run[]) {
   return runs
     .filter((run) => run.competitor_id === competitorId)
     .sort((left, right) => right.created_at.localeCompare(left.created_at))[0];
+}
+
+const NOTE_TONE = {
+  live: "text-[var(--color-success)]",
+  attention: "text-[var(--color-warning)]",
+  neutral: "text-slate-500",
+} as const;
+
+function StatCard({
+  action,
+  href,
+  label,
+  note,
+  tone,
+  value,
+}: {
+  action: string;
+  href: string;
+  label: string;
+  note: string;
+  tone: keyof typeof NOTE_TONE;
+  value: number;
+}) {
+  return (
+    <article className="surface surface-interactive card-target group p-4">
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <div className="mt-2 flex items-end justify-between gap-3">
+        <p className="text-3xl font-semibold tracking-[-0.04em]">{value}</p>
+        <span className={`mb-1 flex items-center gap-1.5 text-xs ${NOTE_TONE[tone]}`}>
+          {tone === "live" ? (
+            <span aria-hidden="true" className="size-1.5 rounded-full bg-[var(--color-success)]" />
+          ) : null}
+          {note}
+        </span>
+      </div>
+      <p className="mt-3 text-xs font-semibold text-[var(--color-accent-strong)]">
+        <Link className="card-link" href={href}>
+          {action}
+          <span
+            aria-hidden="true"
+            className="ml-1 inline-block transition-transform group-hover:translate-x-0.5"
+          >
+            →
+          </span>
+        </Link>
+      </p>
+    </article>
+  );
 }
 
 export function DashboardView() {
@@ -132,33 +181,30 @@ export function DashboardView() {
       </header>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <article className="surface p-4">
-          <p className="text-xs font-medium text-slate-500">Active monitors</p>
-          <div className="mt-2 flex items-end justify-between gap-3">
-            <p className="text-3xl font-semibold tracking-[-0.04em]">{activeCompetitors.length}</p>
-            <span className="mb-1 flex items-center gap-1.5 text-xs text-emerald-700">
-              <span className="size-1.5 rounded-full bg-emerald-500" /> Live
-            </span>
-          </div>
-        </article>
-        <article className="surface p-4">
-          <p className="text-xs font-medium text-slate-500">Material updates</p>
-          <div className="mt-2 flex items-end justify-between gap-3">
-            <p className="text-3xl font-semibold tracking-[-0.04em]">{materialFindings.length}</p>
-            <span className="mb-1 text-xs text-slate-500">Latest view</span>
-          </div>
-        </article>
-        <article className="surface p-4">
-          <p className="text-xs font-medium text-slate-500">Scans to review</p>
-          <div className="mt-2 flex items-end justify-between gap-3">
-            <p className="text-3xl font-semibold tracking-[-0.04em]">{unhealthyRuns.length}</p>
-            <span
-              className={`mb-1 text-xs ${unhealthyRuns.length ? "text-amber-700" : "text-slate-500"}`}
-            >
-              {unhealthyRuns.length ? "Needs attention" : "All clear"}
-            </span>
-          </div>
-        </article>
+        <StatCard
+          action="Manage competitors"
+          href="/competitors"
+          label="Active monitors"
+          note="Live"
+          tone="live"
+          value={activeCompetitors.length}
+        />
+        <StatCard
+          action="Browse updates"
+          href="/findings"
+          label="Material updates"
+          note="Latest view"
+          tone="neutral"
+          value={materialFindings.length}
+        />
+        <StatCard
+          action="Review scans"
+          href="/runs"
+          label="Scans to review"
+          note={unhealthyRuns.length ? "Needs attention" : "All clear"}
+          tone={unhealthyRuns.length ? "attention" : "neutral"}
+          value={unhealthyRuns.length}
+        />
       </div>
 
       {unhealthyRuns.length ? (
@@ -181,7 +227,9 @@ export function DashboardView() {
                     {run.status} scan
                   </Link>
                   {run.failure_summary ? `: ${run.failure_summary}` : null}
-                  {run.partial_reasons.length ? `: ${run.partial_reasons.join("; ")}` : null}
+                  {run.partial_reasons.length
+                    ? `: ${partialReasonLabels(run.partial_reasons, run.partial_summaries).join("; ")}`
+                    : null}
                 </li>
               ))}
             </ul>
@@ -220,7 +268,7 @@ export function DashboardView() {
                 Watching
               </h2>
               <Link className="section-link" href="/competitors">
-                Manage
+                Manage <span aria-hidden="true">→</span>
               </Link>
             </div>
             {activeCompetitors.length ? (
@@ -228,16 +276,19 @@ export function DashboardView() {
                 {activeCompetitors.map((competitor) => {
                   const latestRun = latestRunFor(competitor.id, runPage.items);
                   return (
-                    <li className="px-5 py-3.5" key={competitor.id}>
+                    <li
+                      className="card-target group px-5 py-3.5 transition-colors hover:bg-[var(--color-accent-soft)]/40"
+                      key={competitor.id}
+                    >
                       <div className="flex items-center justify-between gap-3">
                         <Link
-                          className="min-w-0 truncate text-sm font-semibold hover:text-[#b93e42]"
+                          className="card-link min-w-0 truncate text-sm font-semibold transition-colors group-hover:text-[var(--color-accent-strong)]"
                           href={`/competitors/${competitor.id}`}
                         >
                           {competitor.name}
                         </Link>
                         <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] capitalize text-slate-500">
-                          <span className="size-1.5 rounded-full bg-emerald-500" />
+                          <span className="size-1.5 rounded-full bg-[var(--color-success)]" />
                           {latestRun?.status ?? "Not run yet"}
                         </span>
                       </div>
@@ -270,18 +321,18 @@ export function DashboardView() {
           <section aria-labelledby="latest-brief-heading" className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold" id="latest-brief-heading">
-                Weekly digest
+                Weekly Digest
               </h2>
               <Link className="section-link" href="/briefs">
-                Archive
+                Archive <span aria-hidden="true">→</span>
               </Link>
             </div>
             {latestBrief ? (
-              <article className="surface p-5">
+              <article className="surface surface-interactive card-target group p-5">
                 <p className="eyebrow">Latest edition</p>
                 <h3 className="mt-2 leading-snug">
                   <Link
-                    className="font-semibold hover:text-[#b93e42]"
+                    className="card-link font-semibold transition-colors group-hover:text-[var(--color-accent-strong)]"
                     href={`/briefs/${latestBrief.id}`}
                   >
                     {latestBrief.title}
@@ -290,9 +341,18 @@ export function DashboardView() {
                 <p className="mt-2 line-clamp-4 text-sm leading-6 text-slate-600">
                   {latestBrief.executive_summary}
                 </p>
+                <p className="mt-3 text-xs font-semibold text-[var(--color-accent-strong)]">
+                  Read the digest
+                  <span
+                    aria-hidden="true"
+                    className="ml-1 inline-block transition-transform group-hover:translate-x-0.5"
+                  >
+                    →
+                  </span>
+                </p>
               </article>
             ) : (
-              <p className="empty-state p-5 text-sm">No weekly digest yet.</p>
+              <p className="empty-state p-5 text-sm">No Weekly Digest yet.</p>
             )}
           </section>
         </div>

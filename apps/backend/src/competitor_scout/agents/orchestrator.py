@@ -75,6 +75,27 @@ class FindingPublisher(Protocol):
     ) -> object: ...
 
 
+MAX_OTARI_TOOL_ITERATIONS = 25
+"""Hardest cap the gateway accepts for one model/tool loop."""
+
+TOOL_ITERATION_HEADROOM = 3
+"""Loop turns granted on top of a task's search budget.
+
+``max_tool_iterations`` bounds every turn of the gateway's model/tool loop, not
+just the web searches: a wasted or empty search, an intermediate reasoning turn,
+and the turn that emits the structured result each consume one. Sizing the loop
+at exactly ``searches + 1`` therefore fails a task whose model does anything but
+spend every search perfectly, and the gateway rejects the whole call rather than
+returning partial work. The search budget itself stays enforced through the task
+prompt, so this headroom only absorbs turns the model would otherwise waste.
+"""
+
+
+def tool_iteration_budget(max_search_calls: int) -> int:
+    """Size the gateway's model/tool loop for a task's search budget."""
+    return min(max_search_calls + TOOL_ITERATION_HEADROOM, MAX_OTARI_TOOL_ITERATIONS)
+
+
 class PlanValidationError(ValueError):
     def __init__(self, code: str) -> None:
         super().__init__(code)
@@ -680,7 +701,7 @@ class ScoutOrchestrator:
                         max_completion_tokens=self._settings.child_output_token_limit,
                         deadline_seconds=self._settings.child_deadline_seconds,
                         enable_web_search=True,
-                        max_tool_iterations=planned.max_search_calls + 1,
+                        max_tool_iterations=tool_iteration_budget(planned.max_search_calls),
                     )
                     metadata_records.append(metadata)
                     if (
@@ -1324,7 +1345,7 @@ class SourceDiscoveryService:
             max_completion_tokens=self._settings.main_output_token_limit,
             deadline_seconds=self._settings.planning_deadline_seconds,
             enable_web_search=True,
-            max_tool_iterations=search_limit + 1,
+            max_tool_iterations=tool_iteration_budget(search_limit),
         )
 
         accepted: list[DiscoveredSource] = []

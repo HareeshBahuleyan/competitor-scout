@@ -30,6 +30,8 @@ Set these on both `api` and `worker` unless noted otherwise:
 - `OTARI_BASE_URL=https://api.otari.ai`
 - `OTARI_AI_TOKEN` (the only supported Otari credential)
 - `OTARI_MAIN_MODEL` and `OTARI_CHILD_MODEL`
+- optional `OTARI_COST_LOOKUP_ATTEMPTS` and `OTARI_COST_LOOKUP_DELAY_SECONDS`, which bound
+  the settled-cost lookup described in `docs/architecture/agent-runtime.md`
 - all documented task, deadline, concurrency, confidence, and cost-ceiling variables from `.env.example`
 
 Do not configure `E2E_AUTH_SECRET` in production.
