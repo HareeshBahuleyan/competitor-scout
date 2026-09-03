@@ -13,11 +13,12 @@ networking connects `web` to `api`, and both Python services connect to `postgre
 | `worker`   | `/apps/backend`             | `railway.worker.toml` | Private network only |
 | `postgres` | Railway PostgreSQL template | Managed by Railway    | Private network only |
 
-Set `PORT=8000` on `api` and set `WEB_INTERNAL_API_URL` on `web` to
-`http://api.railway.internal:8000`. Using an explicit API port makes the first manual
-deployment deterministic even before Railway has populated deployment-derived service
-variables. Make the web variable available during the image build because Next.js
-materializes rewrite configuration during the production build.
+Set `PORT=8000` on `api`, set `PORT=3000` on `web`, and set
+`WEB_INTERNAL_API_URL` on `web` to `http://api.railway.internal:8000`. Explicit service
+ports make first manual deployments and Railway health checks deterministic even before
+Railway has populated deployment-derived service variables. Make the web API variable
+available during the image build because Next.js materializes rewrite configuration
+during the production build.
 The web `Dockerfile` declares it as a build-stage `ARG`; keep that declaration when
 changing the image build so Railway can pass the service variable to `next build`.
 
@@ -49,6 +50,7 @@ Do not configure `E2E_AUTH_SECRET` in production.
 
 Set this on `web`:
 
+- `PORT=3000`
 - `WEB_INTERNAL_API_URL=http://api.railway.internal:8000`
 
 Set this on `api` only:
