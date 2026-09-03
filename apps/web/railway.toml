@@ -4,7 +4,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "pnpm start --hostname 0.0.0.0 --port $PORT"
+startCommand = "pnpm start --hostname 0.0.0.0 --port 3000"
 healthcheckPath = "/"
 healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
