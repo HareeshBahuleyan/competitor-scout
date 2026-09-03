@@ -6,6 +6,9 @@ RUN corepack enable && corepack prepare pnpm@10.11.1 --activate
 
 FROM base AS build
 
+ARG WEB_INTERNAL_API_URL=http://localhost:8000
+ENV WEB_INTERNAL_API_URL=$WEB_INTERNAL_API_URL
+
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
